@@ -62,4 +62,3 @@ else
     Run, "D:\Dict\YoudaoDict.exe"
 }
 return
-加了有道的
