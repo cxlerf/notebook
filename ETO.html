@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地球三体组织 (ETO) Logo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #0a0a0a;
+        }
+        .title-font {
+            font-family: 'Orbitron', sans-serif;
+        }
+        /* 为三体恒星添加辉光效果 */
+        .sun-glow {
+            filter: drop-shadow(0 0 6px #f59e0b) drop-shadow(0 0 12px #ef4444);
+            animation: pulse 4s infinite alternate;
+        }
+        
+        @keyframes pulse {
+            from {
+                filter: drop-shadow(0 0 4px #f59e0b) drop-shadow(0 0 8px #ef4444);
+            }
+            to {
+                filter: drop-shadow(0 0 8px #fbbf24) drop-shadow(0 0 16px #f87171);
+            }
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div class="text-center">
+        <!-- SVG Logo -->
+        <svg width="250" height="250" viewBox="0 0 200 200" class="mx-auto">
+            <!-- 眼睛的外部轮廓 -->
+            <path d="M 10,100 C 40,30 160,30 190,100 C 160,170 40,170 10,100 Z" stroke="#4b5563" stroke-width="1.5" fill="none" />
+
+            <!-- 虹膜背景 -->
+            <circle cx="100" cy="100" r="45" fill="#111827" />
+
+            <!-- 用于控制三颗恒星整体旋转的组 -->
+            <g>
+                <!-- 动画：整体缓慢旋转 -->
+                <animateTransform 
+                    attributeName="transform"
+                    attributeType="XML"
+                    type="rotate"
+                    from="0 100 100"
+                    to="360 100 100"
+                    dur="25s"
+                    repeatCount="indefinite" />
+
+                <!-- 第一颗恒星和它的轨道 -->
+                <g>
+                    <animateTransform attributeName="transform" type="rotate" from="0 100 100" to="360 100 100" dur="8s" repeatCount="indefinite" />
+                    <circle cx="100" cy="75" r="6" fill="#facc15" class="sun-glow" />
+                </g>
+
+                <!-- 第二颗恒星和它的轨道 -->
+                <g>
+                    <animateTransform attributeName="transform" type="rotate" from="360 100 100" to="0 100 100" dur="12s" repeatCount="indefinite" />
+                    <circle cx="70" cy="115" r="4" fill="#fb923c" class="sun-glow" />
+                </g>
+
+                <!-- 第三颗恒星和它的轨道 -->
+                <g>
+                    <animateTransform attributeName="transform" type="rotate" from="0 100 100" to="-360 100 100" dur="15s" repeatCount="indefinite" />
+                    <circle cx="125" cy="110" r="5" fill="#ef4444" class="sun-glow" />
+                </g>
+            </g>
+        </svg>
+
+        <!-- Logo下方的文字 -->
+        <div class="mt-8">
+            <h1 class="text-3xl text-gray-200 tracking-[0.2em] title-font">ETO</h1>
+            <p class="text-sm text-gray-500 tracking-wider mt-2">地球三体组织</p>
+            <p class="text-xs text-gray-600 mt-4">Earth-Trisolaris Organization</p>
+        </div>
+    </div>
+
+</body>
+</html>
+<!-- 好的，这是一个为《三体》中的地球三体组织（ETO）设计的动态Logo。
+这个设计的核心理念是“主在凝视”。Logo中央是三颗围绕彼此混乱运动的恒星，代表着三体世界，
+它们共同构成了瞳孔。整个眼睛的造型则象征着组织对三体文明的崇拜，以及他们认为无所不在的“主”的目光。
+背景采用深色调，以突出ETO作为一个秘密、精英且带有末世情结的组织的神秘感。 -->
