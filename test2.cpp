@@ -1,13 +1,8 @@
-#include <stdio.h>
-
-int main()
-{
-
-	int a[5] = {1, 2, 3, 4, 5};
-
-	int* (p) = a;
-
-	printf("%d\n", *(p));
-
-	printf("%d\n", *(p + 1));
-}
+mov eax,dword ptr [ebp+8]
+mov eax,dword ptr [ebp+12]
+cmp eax,edx
+jbe .L1
+mov eax,dword ptr [edx]
+jmp .L2
+.L1:
+mov eax.dword ptr [eax]
