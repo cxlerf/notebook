@@ -1,8 +1,5 @@
-mov eax,dword ptr [ebp+8]
-mov eax,dword ptr [ebp+12]
-cmp eax,edx
-jbe .L1
-mov eax,dword ptr [edx]
-jmp .L2
-.L1:
-mov eax.dword ptr [eax]
+#include<stdio.h>
+int main(){
+    printf("hello world\n");
+    printf("nice to meet you\n");
+}
