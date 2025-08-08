@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "bd5a33bb7d2abd4d",
+        "id": "538c82e5c4537150",
         "type": "tabs",
         "children": [
           {
-            "id": "cedb485d8fb2705e",
+            "id": "e7e2b34276641baf",
             "type": "leaf",
             "state": {
               "type": "empty",
@@ -90,7 +90,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "test.md",
+                "file": "计算机组成原理王道.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -100,7 +100,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "test 的反向链接列表"
+              "title": "计算机组成原理王道 的反向链接列表"
             }
           },
           {
@@ -164,7 +164,7 @@
       "command-palette:打开命令面板": false
     }
   },
-  "active": "cedb485d8fb2705e",
+  "active": "e7e2b34276641baf",
   "lastOpenFiles": [
     "计算机组成原理王道.md",
     "test.md",
