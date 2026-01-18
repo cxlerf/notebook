@@ -1,2486 +1,1543 @@
-**Preface**
-前言
+Rotates this way
+==沿此方向旋转==
 
-**To Everyone**
-致每一个人
+HARD DISK DRIVES
+==硬盘驱动器==
 
-Welcome to this book!
-欢迎阅读本书！
+CRUX: HOW TO ACCOUNT FOR DISK ROTATION COSTS
+==关键问题：如何计算磁盘旋转成本==
 
-We hope you'll enjoy reading it as much as we enjoyed writing it.
-我们希望您阅读本书的乐趣能像我们撰写本书时一样多。
+How can we implement an algorithm that more closely approximates SJF by taking both seek and rotation into account?
+==我们如何实现一种算法，通过同时考虑寻道和旋转，从而更接近最短作业优先（SJF）？==
 
-The book is called **Operating Systems: Three Easy Pieces** (available at [http://ostep.org](http://ostep.org)), and the title is obviously an homage to one of the greatest sets of lecture notes ever created, by one Richard Feynman on the topic of Physics.
-本书名为《**操作系统导论**》（**Operating Systems: Three Easy Pieces**，可在 [http://ostep.org](http://ostep.org) 获取），这个标题显然是在向理查德·费曼（Richard Feynman）关于物理学的伟大讲义致敬，那是通过史以来最伟大的讲义之一。
+SPTF: Shortest Positioning Time First
+==SPTF：最短定位时间优先==
 
-While this book will undoubtedly fall short of the high standard set by that famous physicist, perhaps it will be good enough for you in your quest to understand what operating systems (and more generally, systems) are all about.
-虽然本书无疑难以企及那位著名物理学家设立的高标准，但也许它足够帮助您探索操作系统（以及更广泛的系统）的奥秘。
+Before discussing shortest positioning time first or SPTF scheduling (sometimes also called shortest access time first or SATF), which is the solution to our problem, let us make sure we understand the problem in more detail.
+==在讨论作为解决方案的最短定位时间优先或 SPTF 调度（有时也称为最短访问时间优先或 SATF）之前，让我们确保更详细地理解这个问题。==
 
-The three easy pieces refer to the three major thematic elements the book is organized around: virtualization, concurrency, and persistence.
-这“三个简单的部分”指的是本书围绕组织的三个主要主题元素：虚拟化、并发和持久性。
+Figure 37.8 presents an example.
+==图 37.8 展示了一个例子。==
 
-In discussing these concepts, we'll end up discussing most of the important things an operating system does.
-在讨论这些概念时，我们将最终探讨操作系统所做的大部分重要工作。
+In the example, the head is currently positioned over sector 30 on the inner track.
+==在这个例子中，磁头当前位于内圈磁道的扇区 30 上方。==
 
-Hopefully, you'll also have some fun along the way.
-希望您在此过程中也能获得一些乐趣。
+The scheduler thus has to decide: should it schedule sector 16 (on the middle track) or sector 8 (on the outer track) for its next request.
+==因此调度器必须决定：下一个请求应该调度扇区 16（在中间磁道）还是扇区 8（在外圈磁道）。==
 
-Learning new things is fun, right?
-学习新事物很有趣，对吧？
+So which should it service next?
+==那么它应该接下来服务哪一个呢？==
 
-At least, it (usually) should be.
-至少，它（通常）应该是这样的。
+The answer, of course, is "it depends".
+==答案当然是“视情况而定”。==
 
-Each major concept is divided into a set of chapters, most of which present a particular problem and then show how to solve it.
-每个主要概念都分为一组章节，其中大多数章节会提出一个特定问题，然后展示如何解决它。
+In engineering, it turns out "it depends" is almost always the answer, reflecting that trade-offs are part of the life of the engineer;
+==在工程学中，事实证明“视情况而定”几乎总是答案，这反映了权衡取舍是工程师生活的一部分；==
 
-The chapters are short, and try (as best as possible) to reference the source material where the ideas really came from.
-章节都很短，并尽可能地引用思想真正来源的原始资料。
+such maxims are also good in a pinch, e.g., when you don't know an answer to your boss's question, you might want to try this gem.
+==这种格言在紧要关头也很好用，例如，当你不知道老板问题的答案时，你可能想试试这个锦囊妙计。==
 
-One of our goals in writing this book is to make the paths of history as clear as possible, as we think that helps a student understand what is, what was, and what will be more clearly.
-我们要编写这本书的目标之一是尽可能清晰地呈现历史的脉络，因为我们认为这有助于学生更清楚地理解现状、过去和未来。
+However, it is almost always better to know why it depends, which is what we discuss here.
+==然而，知道“为什么要视情况而定”几乎总是更好的，这正是我们要在这里讨论的。==
 
-In this case, seeing how the sausage was made is nearly as important as understanding what the sausage is good for.
-在这种情况下，了解“香肠是如何制作的”几乎与了解“香肠有什么用处”一样重要。
+What it depends on here is the relative time of seeking as compared to rotation.
+==这里取决于寻道时间与旋转时间的相对大小。==
 
-Hint: eating!
-提示：吃！
+If, in our example, seek time is much higher than rotational delay, then SSTF (and variants) are just fine.
+==如果在这个例子中，寻道时间远高于旋转延迟，那么 SSTF（及其变体）就很好。==
 
-Or if you're a vegetarian, running away from..
-或者如果您是素食主义者，那就逃离……
+However, imagine if seek is quite a bit faster than rotation.
+==然而，想象一下如果寻道比旋转快得多。==
 
-There are a couple devices we use throughout the book which are probably worth introducing here.
-我们在整本书中使用了一些手段，也许值得在这里介绍一下。
+Then, in our example, it would make more sense to seek further to service request 8 on the outer track than it would to perform the shorter seek to the middle track to service 16, which has to rotate all the way around before passing under the disk head.
+==那么，在我们的例子中，寻道至更远的外圈磁道去服务请求 8，比执行较短的寻道去中间磁道服务请求 16 更有意义，因为后者在经过磁头下方之前必须旋转一整圈。==
 
-The first is the **crux of the problem**.
-第一点是**问题的关键 (crux of the problem)**。
+Figure 37.8: SSTF: Sometimes Not Good Enough
+==图 37.8：SSTF：有时还不够好==
 
-Anytime we are trying to solve a problem, we first try to state what the most important issue is.
-每当我们试图解决一个问题时，我们首先尝试陈述最重要的问题是什么。
+TIP: IT ALWAYS DEPENDS (LIVNY'S LAW)
+==提示：永远视情况而定（LIVNY 定律）==
 
-Such a crux of the problem is explicitly called out in the text, and hopefully solved via the techniques, algorithms, and ideas presented in the rest of the text.
-这种“问题的关键”会在文中明确指出，并希望通过文中随后介绍的技术、算法和思想来解决。
+Almost any question can be answered with "it depends", as our colleague Miron Livny always says.
+==正如我们的同事 Miron Livny 常说的那样，几乎任何问题都可以用“视情况而定”来回答。==
 
-In many places, we'll explain how a system works by showing its behavior over time.
-在很多地方，我们将通过展示系统随时间变化的行为来解释它是如何工作的。
+However, use with caution, as if you answer too many questions this way, people will stop asking you questions altogether.
+==不过，使用时要小心，因为如果你用这种方式回答太多问题，人们就会完全不再问你问题了。==
 
-These timelines are at the essence of understanding; if you know what happens, for example, when a process page faults, you are on your way to truly understanding how virtual memory operates.
-这些时间线是理解的本质；例如，如果您知道当进程发生页面错误（page fault）时会发生什么，您就开始真正理解虚拟内存是如何运作的了。
+For example, somebody asks: "want to go to lunch?"
+==例如，有人问：“想去吃午饭吗？”==
 
-If you comprehend what takes place when a journaling file system writes a block to disk, you have taken the first steps towards mastery of storage systems.
-如果您理解当日志文件系统将一个块写入磁盘时发生了什么，您就迈出了精通存储系统的第一步。
+You reply: "it depends, are you coming along?"
+==你回答：“视情况而定，你也去吗？”==
 
-There are also numerous asides and tips throughout the text, adding a little color to the mainline presentation.
-文中还有许多旁白和提示，为主要内容的陈述增添了一些色彩。
+On modern drives, as we saw above, both seek and rotation are roughly equivalent (depending, of course, on the exact requests), and thus SPTF is useful and improves performance.
+==在现代驱动器上，正如我们上面所看到的，寻道和旋转大致相当（当然取决于具体的请求），因此 SPTF 是有用的并且可以提高性能。==
 
-Asides tend to discuss something relevant (but perhaps not essential) to the main text.
-旁白倾向于讨论与正文相关（但也许不是必不可少）的内容。
+However, it is even more difficult to implement in an OS, which generally does not have a good idea where track boundaries are or where the disk head currently is (in a rotational sense).
+==然而，在操作系统中实现它更加困难，因为操作系统通常不太清楚磁道边界在哪里，或者磁头当前在哪里（在旋转意义上）。==
 
-Tips tend to be general lessons that can be applied to systems you build.
-提示倾向于通用的经验教训，可应用于您构建的系统。
+Thus, SPTF is usually performed inside a drive, described below.
+==因此，SPTF 通常在驱动器内部执行，如下所述。==
 
-An index at the end of the book lists all of these tips and asides (as well as cruces, the odd plural of crux) for your convenience.
-书末的索引列出了所有这些提示和旁白（以及 cruces，即 crux 的古怪复数形式），以方便您查阅。
+Other Scheduling Issues
+==其他调度问题==
 
-We use one of the oldest didactic methods, the dialogue, throughout the book, as a way of presenting some of the material in a different light.
-我们在整本书中使用了最古老的教学方法之一——对话，作为以不同角度呈现部分材料的一种方式。
+There are many other issues we do not discuss in this brief description of basic disk operation, scheduling, and related topics.
+==在这个关于基本磁盘操作、调度和相关主题的简要描述中，还有许多其他问题我们没有讨论。==
 
-These are used to introduce the major thematic concepts (in a peachy way, as we will see), as well as to review material every now and then.
-这些对话用于介绍主要的主题概念（正如我们将看到的，以一种“桃子般”有趣的方式），以及不时地复习材料。
+One such issue is this: where is disk scheduling performed on modern systems?
+==其中一个问题是：现代系统的磁盘调度是在哪里执行的？==
 
-They are also a chance to write in a more humorous style.
-这也是一个以更幽默的风格进行写作的机会。
+In older systems, the operating system did all the scheduling;
+==在旧系统中，操作系统负责所有的调度；==
 
-Whether you find them useful, or humorous, well, that's another matter entirely.
-无论您觉得它们是有用还是幽默，好吧，那完全是另一回事了。
+after looking through the set of pending requests, the OS would pick the best one, and issue it to the disk.
+==在浏览了一组未决请求后，操作系统会挑选最好的一个，并将其发送给磁盘。==
 
-At the beginning of each major section, we'll first present an abstraction that an operating system provides, and then work in subsequent chapters on the mechanisms, policies, and other support needed to provide the abstraction.
-在每个主要部分的开头，我们将首先介绍操作系统提供的一个抽象，然后在随后的章节中研究提供该抽象所需的机制、策略和其他支持。
+When that request completed, the next one would be chosen, and so forth.
+==当该请求完成后，会选择下一个，依此类推。==
 
-Abstractions are fundamental to all aspects of Computer Science, so it is perhaps no surprise that they are also essential in operating systems.
-抽象是计算机科学各个方面的基础，因此它们在操作系统中也至关重要，这也许不足为奇。
+Disks were simpler then, and so was life.
+==那时的磁盘比较简单，生活也是如此。==
 
-Throughout the chapters, we try to use real code (not pseudocode) where possible, so for virtually all examples, you should be able to type them up yourself and run them.
-在整章中，我们尽可能尝试使用真实代码（而不是伪代码），因此对于几乎所有的示例，您应该都能够自己输入并运行它们。
+In modern systems, disks can accommodate multiple outstanding requests, and have sophisticated internal schedulers themselves (which can implement SPTF accurately; inside the disk controller, all relevant details are available, including exact head position).
+==在现代系统中，磁盘可以容纳多个未完成的请求，并且自身拥有复杂的内部调度器（它可以准确地实现 SPTF；在磁盘控制器内部，所有相关的细节都是可用的，包括精确的磁头位置）。==
 
-Running real code on real systems is the best way to learn about operating systems, so we encourage you to do so when you can.
-在真实系统上运行真实代码是学习操作系统的最佳方式，因此我们鼓励您在可能的情况下这样做。
+Thus, the OS scheduler usually picks what it thinks the best few requests are (say 16) and issues them all to disk;
+==因此，操作系统调度器通常会挑选它认为最好的几个请求（比如 16 个），并将它们全部发送给磁盘；==
 
-We are also making code available for your viewing pleasure.
-我们还提供了代码供您查阅。
+the disk then uses its internal knowledge of head position and detailed track layout information to service said requests in the best possible (SPTF) order.
+==然后，磁盘利用其内部的磁头位置知识和详细的磁道布局信息，以尽可能最好的顺序（SPTF）服务这些请求。==
 
-In various parts of the text, we have sprinkled in a few homeworks to ensure that you are understanding what is going on.
-在文中的不同部分，我们穿插了一些家庭作业，以确保您理解正在发生的事情。
+Another important related task performed by disk schedulers is I/O merging.
+==磁盘调度器执行的另一个重要的相关任务是 I/O 合并。==
 
-Many of these homeworks are little simulations of pieces of the operating system.
-其中许多作业是操作系统组件的小型模拟。
+For example, imagine a series of requests to read blocks 33, then 8, then 34, as in Figure 37.8.
+==例如，想象一系列读取块 33，然后是 8，然后是 34 的请求，如图 37.8 所示。==
 
-You should download the homeworks, and run them to quiz yourself.
-您应该下载这些作业，并运行它们来测验自己。
+In this case, the scheduler should merge the requests for blocks 33 and 34 into a single two-block request;
+==在这种情况下，调度器应该将块 33 和 34 的请求合并为一个单独的双块请求；==
 
-The homework simulators have the following feature: by giving them a different random seed, you can generate a virtually infinite set of problems.
-这些作业模拟器具有以下特点：通过给它们不同的随机种子，您可以生成几乎无限的一组问题。
+any reordering that the scheduler does is performed upon the merged requests.
+==调度器所做的任何重新排序都是针对合并后的请求执行的。==
 
-The simulators can also be told to solve the problems for you.
-这些模拟器也可以被指令为您解决问题。
+Merging is particularly important at the OS level, as it reduces the number of requests sent to the disk and thus lowers overheads.
+==合并在操作系统层面特别重要，因为它减少了发送到磁盘的请求数量，从而降低了开销。==
 
-Thus, you can test and re-test yourself until you have achieved a good level of understanding.
-因此，您可以反复测试自己，直到达到良好的理解水平。
+One final problem that modern schedulers address is this: how long should the system wait before issuing an  to disk?
+==现代调度器解决的最后一个问题是：系统在向磁盘发出 I/O 请求之前应该等待多久？==
 
-The most important addendum to this book is a set of projects in which you learn about how real systems work by designing, implementing, and testing your own code.
-本书最重要的附录是一组项目，在这些项目中，您将通过设计、实现和测试自己的代码来了解真实系统是如何工作的。
+One might naively think that the disk, once it has even a single I/O, should immediately issue the request to the drive;
+==人们可能会天真地认为，磁盘一旦有一个 I/O 请求，就应该立即向驱动器发出请求；==
 
-All projects (as well as the code examples, mentioned above) are in the C programming language.
-所有项目（以及上面提到的代码示例）都是用 C 语言编写的。
+this approach is called work-conserving, as the disk will never be idle if there are requests to serve.
+==这种方法被称为工作守恒（work-conserving），因为如果有请求需要服务，磁盘将永远不会空闲。==
 
-C is a simple and powerful language that underlies most operating systems, and thus worth adding to your tool-chest of languages.
-C 是一种简单而强大的语言，是大多数操作系统的基础，因此值得将其添加到您的语言工具箱中。
+However, research on anticipatory disk scheduling has shown that sometimes it is better to wait for a bit [ID01], in what is called a non-work-conserving approach.
+==然而，关于预期磁盘调度的研究表明，有时等待一会儿会更好 [ID01]，这被称为非工作守恒（non-work-conserving）方法。==
 
-Two types of projects are available (see the online appendix for ideas).
-有两种类型的项目可供选择（请参阅在线附录以获取思路）。
+By waiting, a new and "better" request may arrive at the disk, and thus overall efficiency is increased.
+==通过等待，一个新的且“更好”的请求可能会到达磁盘，从而提高整体效率。==
 
-The first type is systems programming projects.
-第一类是系统编程项目。
+Of course, deciding when to wait, and for how long, can be tricky;
+==当然，决定何时等待以及等待多久可能很棘手；==
 
-These projects are great for those who are new to C and UNIX and want to learn how to do low-level C programming.
-这些项目非常适合那些刚接触 C 和 UNIX 并想学习如何进行低级 C 编程的人。
-
-The second type is based on a real operating system kernel developed at MIT called **xv6**.
-第二类项目基于麻省理工学院（MIT）开发的一个名为 **xv6** 的真实操作系统内核。
-
-These projects are great for students that already have some C and want to get their hands dirty inside the OS.
-这些项目非常适合那些已经掌握了一些 C 语言并想深入操作系统内部实践的学生。
-
-At Wisconsin, we've run the course in three different ways: either all systems programming, all xv6 programming, or a mix of both.
-在威斯康星大学，我们以三种不同的方式开设这门课程：要么全部是系统编程，要么全部是 xv6 编程，或者是两者的混合。
-
-We are slowly making project descriptions, and a testing framework, available.
-我们正在慢慢提供项目说明和测试框架。
-
-See our repository for more information.
-请查看我们的代码仓库以获取更多信息。
-
-If not part of a class, this will give you a chance to do these projects on your own, to better learn the material.
-如果您不是在参加课程，这将给您一个独自完成这些项目的机会，以便更好地学习材料。
-
-Unfortunately, you don't have a TA to bug when you get stuck, but not everything in life can be free (but books can be!).
-遗憾的是，当您卡住时没有助教可以打扰，但生活中并非所有东西都是免费的（但书可以是！）。
-
-**To Educators**
-致教育工作者
-
-If you are an instructor or professor who wishes to use this book, please feel free to do so.
-如果您是一位希望使用本书的讲师或教授，请随时使用。
-
-As you may have noticed, they are free and available on-line from the following web page: [http://www.ostep.org](http://www.ostep.org)
-正如您可能注意到的，它们是免费的，并可从以下网页在线获取：[http://www.ostep.org](http://www.ostep.org)
-
-You can also purchase a printed copy from [http://lulu.com](http://lulu.com) or [http://amazon.com](http://amazon.com).
-您也可以从 [http://lulu.com](http://lulu.com) 或 [http://amazon.com](http://amazon.com) 购买纸质版。
-
-The course divides fairly well across a 15-week semester, in which you can cover most of the topics within at a reasonable level of depth.
-这门课程可以很好地划分在 15 周的学期中，您可以以合理的深度涵盖其中的大部分主题。
-
-Cramming the course into a 10-week quarter probably requires dropping some detail from each of the pieces.
-将课程压缩到 10 周的学期可能需要从每个部分中删减一些细节。
-
-There are also a few chapters on virtual machine monitors, which we usually squeeze in sometime during the semester, either right at end of the large section on virtualization, or near the end as an aside.
-还有几章关于虚拟机监视器的内容，我们通常会在学期中的某个时间挤进去讲，要么是在虚拟化这一大章的最后，要么是在接近尾声时作为补充。
-
-One slightly unusual aspect of the book is that concurrency, a topic at the front of many OS books, is pushed off herein until the student has built an understanding of virtualization of the CPU and of memory.
-本书一个稍显不同寻常的地方是，并发（许多操作系统书籍开头就会讲的主题）在这里被推迟了，直到学生建立了对 CPU 和内存虚拟化的理解之后才讲。
-
-In our experience in teaching this course for nearly 20 years, students have a hard time understanding how the concurrency problem arises, or why they are trying to solve it, if they don't yet understand what an address space is, what a process is, or why context switches can occur at arbitrary points in time.
-根据我们要讲授这门课程近 20 年的经验，如果学生还不理解什么是地址空间、什么是进程，或者为什么上下文切换可能在任意时间点发生，他们就很难理解并发问题是如何产生的，或者为什么要试图解决它。
-
-Once they do understand these concepts, however, introducing the notion of threads and the problems that arise due to them becomes rather easy, or at least, easier.
-然而，一旦他们理解了这些概念，引入线程的概念以及由此产生的问题就变得相当容易，或者至少更容易了。
-
-As much as is possible, we use a chalkboard (or whiteboard) to deliver a lecture.
-我们要尽可能使用黑板（或白板）来讲课。
-
-On these more conceptual days, we come to class with a few major ideas and examples in mind and use the board to present them.
-在讲解这些概念性较强的日子里，我们会带着几个主要观点和例子来上课，并用黑板来演示它们。
-
-Handouts are useful to give the students concrete problems to solve based on the material.
-讲义对于给学生提供基于材料的具体问题来解决很有用。
-
-On more practical days, we simply plug a laptop into the projector and show real code.
-在讲解实践性较强的日子里，我们只需将笔记本电脑连接到投影仪上并展示真实代码。
-
-This style works particularly well for concurrency lectures as well as for any discussion sections where you show students code that is relevant for their projects.
-这种风格特别适合并发课程，以及任何向学生展示与其项目相关的代码的讨论环节。
-
-We don't generally use slides to present material, but have now made a set available for those who prefer that style of presentation.
-我们通常不使用幻灯片来展示材料，但现在已经为那些喜欢这种展示风格的人提供了一套幻灯片。
-
-If you'd like a copy of any of these materials, please drop us an email.
-如果您想要这些材料的副本，请给我们发电子邮件。
-
-One last request: if you use the free online chapters, please just link to them, instead of making a local copy.
-最后一个请求：如果您使用免费的在线章节，请直接链接到它们，而不是制作本地副本。
-
-This helps us track usage (million of chapters downloaded each month) and also ensures students get the latest (and greatest?) version.
-这有助于我们跟踪使用情况（每月数百万章的下载量），并确保学生获得最新（也是最好？）的版本。
-
-**To Students**
-致学生
-
-If you are a student reading this book, thank you!
-如果您是正在阅读本书的学生，谢谢您！
-
-It is an honor for us to provide some material to help you in your pursuit of knowledge about operating systems.
-我们很荣幸能提供一些材料，帮助您追求关于操作系统的知识。
-
-We both think back fondly towards some textbooks of our undergraduate days (e.g., Hennessy and Patterson, the classic book on computer architecture) and hope this book will become one of those positive memories for you.
-我们要深情地回想起我们本科时代的一些教科书（例如，Hennessy 和 Patterson 编写的关于计算机体系结构的经典著作），并希望这本书能成为您美好回忆的一部分。
-
-You may have noticed this book is free and available online.
-您可能已经注意到这本书是免费的，并且可以在线获取。
-
-There is one major reason for this: textbooks are generally too expensive.
-这其中有一个主要原因：教科书通常太贵了。
-
-This book, we hope, is the first of a new wave of free materials to help those in pursuit of their education, regardless of which part of the world they come from or how much they are willing to spend for a book.
-我们希望这本书能成为新一波免费教材的先驱，帮助那些追求教育的人，无论他们来自世界的哪个角落，也无论他们愿意为一本书花多少钱。
-
-Failing that, it is one free book, which is better than none.
-即便做不到这一点，这也算是一本免费的书，总比没有好。
-
-We also hope, where possible, to point you to the original sources of much of the material in the book: the great papers and persons who have shaped the field of operating systems over the years.
-我们还希望在可能的情况下，向您指出书中大部分材料的原始来源：那些多年来塑造了操作系统领域的伟大论文和人物。
-
-Ideas are not pulled out of the air; they come from smart and hard-working people (including numerous Turing-award winners), and thus we should strive to celebrate those ideas and people where possible.
-思想不是凭空产生的；它们来自聪明和勤奋的人（包括许多图灵奖得主），因此我们应该尽可能地赞美这些思想和人物。
-
-In doing so, we hopefully can better understand the revolutions that have taken place, instead of writing texts as if those thoughts have always been present.
-这样做，我们希望能更好地理解已经发生的革命，而不是把教科书写得好像这些思想一直存在一样。
-
-Further, perhaps such references will encourage you to dig deeper on your own.
-此外，也许这些参考文献会鼓励您自己进行更深入的挖掘。
-
-Reading the famous papers of our field is certainly one of the best ways to learn.
-阅读我们领域的著名论文无疑是最好的学习方式之一。
-
-A digression here: "free" in the way we use it here does not mean open source, and it does not mean the book is not copyrighted with the usual protections - it is!
-这里离题一下：我们在这里使用的“免费”并不意味着开源，也不意味着这本书没有受到通常的版权保护——它受保护！
-
-What it means is that you can download the chapters and use them to learn about operating systems.
-它的意思是您可以下载章节并使用它们来学习操作系统。
-
-Why not an open-source book, just like Linux is an open-source kernel?
-为什么不像 Linux 是开源内核那样做一本开源书呢？
-
-Well, we believe it is important for a book to have a single voice throughout, and have worked hard to provide such a voice.
-好吧，我们认为一本书在通篇保持统一的声音很重要，并且我们一直在努力提供这样的声音。
-
-When you're reading it, the book should kind of feel like a dialogue with the person explaining something to you.
-当您阅读它时，这本书应该感觉像是与向您解释某事的人进行的对话。
-
-Hence, our approach.
-因此，我们要采取了这种方法。
-
-The Turing Award is the highest award in Computer Science; it is like the Nobel Prize, except that you have never heard of it.
-图灵奖是计算机科学的最高奖项；它就像诺贝尔奖，除了您可能从未听说过它。
-
-**Acknowledgments**
-致谢
-
-This section will contain thanks to those who helped us put the book together.
-本节将包含对那些帮助我们编写本书的人的感谢。
-
-The important thing for now: your name could go here!
-现在重要的是：您的名字可能会出现在这里！
-
-But, you have to help.
-但是，您得提供帮助。
-
-So send us some feedback and help debug this book.
-所以给我们发送一些反馈，帮助调试这本书。
-
-And you could be famous!
-您可能会出名！
-
-Or, at least, have your name in some book.
-或者，至少，您的名字会出现在某本书里。
-
-The people who have helped so far include:
-到目前为止提供帮助的人包括：（以下为大量人名，此处保留原文以示尊重）
-Aaron Gember, Aashrith H Govindraj, Abdallah Ahmed, Abhinav Mehra, ... (and hundreds more students and contributors).
-
-Special thanks to those marked with an asterisk above, who have gone above and beyond in their suggestions for improvement.
-特别感谢上面标有星号的人，他们在提出改进建议方面付出了额外的努力。
-
-In addition, a hearty thanks to Professor Joe Meehean (Lynchburg) for his detailed notes on each chapter.
-此外，衷心感谢 Joe Meehean 教授（Lynchburg）为每一章提供的详细笔记。
-
-To Professor Jerod Weinman (Grinnell) and his entire class for their incredible booklets.
-感谢 Jerod Weinman 教授（Grinnell）和他全班同学制作的令人难以置信的小册子。
-
-To Professor Chien-Chung Shen (Delaware) for his invaluable and detailed reading and comments.
-感谢 Chien-Chung Shen 教授（特拉华大学）提供的宝贵而详细的阅读和评论。
-
-To Adam Drescher (WUSTL) for his careful reading and suggestions.
-感谢 Adam Drescher (WUSTL) 的仔细阅读和建议。
-
-To Glen Granzow (College of Idaho) for his incredibly detailed comments and tips.
-感谢 Glen Granzow（爱达荷学院）提供的极其详细的评论和提示。
-
-To Michael Walfish (NYU) for his enthusiasm and detailed suggestions for improvement.
-感谢 Michael Walfish (NYU) 的热情和详细的改进建议。
-
-To Peter Peterson (UMD) for his many bits of useful feedback and commentary.
-感谢 Peter Peterson (UMD) 提供的许多有用的反馈和评论。
-
-To Mark Kampe (Pomona) for detailed criticism (we only wish we could fix all suggestions!).
-感谢 Mark Kampe (Pomona) 的详细批评（我们只希望我们能修正所有的建议！）。
-
-And to Youjip Won (Hanyang) for his translation work into Korean(!) and numerous insightful suggestions.
-感谢 Youjip Won (汉阳大学) 将本书翻译成韩语（！）以及无数富有洞察力的建议。
-
-To Terence Kelly for his sidebar on memory mapping.
-感谢 Terence Kelly 关于内存映射的侧边栏内容。
-
-All have helped these authors immeasurably in the refinement of the materials herein.
-所有这些人都对作者完善本书材料提供了不可估量的帮助。
-
-A special thank you to Professor Peter Reiher (UCLA) for writing a wonderful set of security chapters, all in the style of this book.
-特别感谢 Peter Reiher 教授（UCLA）撰写了一套精彩的安全章节，风格与本书完全一致。
-
-We had the fortune of meeting Peter many years ago, and little did we know that we would collaborate in this fashion two decades later.
-我们有幸在许多年前遇到了 Peter，当时完全没想到二十年后我们会以这种方式合作。
-
-Amazing work!
-了不起的工作！
-
-Also, many thanks to the hundreds of students who have taken 537 over the years.
-此外，非常感谢多年来选修 537 课程的数百名学生。
-
-In particular, the Fall '08 class who encouraged the first written form of these notes (they were sick of not having any kind of textbook to read pushy students!), and then praised them enough for us to keep going.
-特别是 08 年秋季班的学生，他们鼓励了这些笔记的最初书面形式（他们厌倦了没有任何教科书可读——爱催促的学生！），然后给予了足够的赞扬让我们坚持下去。
-
-A great debt of thanks is also owed to the brave few who took the xv6 project lab course, much of which is now incorporated into the main 537 course.
-还要非常感谢那些参加 xv6 项目实验课程的勇敢的少数人，其中大部分内容现在已并入主要的 537 课程中。
-
-Although they do not directly help with the book, our students have taught us much of what we know about systems.
-虽然他们不直接帮助编写本书，但我们的学生教会了我们许多关于系统的知识。
-
-We talk with them regularly while they are at Wisconsin, but they do all the real work and by telling us about what they are doing, we learn new things every week.
-当他们在威斯康星大学时，我们要定期与他们交谈，但他们做了所有实际的工作，通过告诉我们他们在做什么，我们每周都能学到新东西。
-
-Our graduate students have largely been funded by the National Science Foundation (NSF), the Department of Energy Office of Science (DOE), and by industry grants.
-我们的研究生主要由国家科学基金会 (NSF)、能源部科学办公室 (DOE) 和行业资助。
-
-We are especially grateful to the NSF for their support over many years, as our research has shaped the content of many chapters herein.
-我们要特别感谢 NSF 多年来的支持，因为我们的研究塑造了本书许多章节的内容。
-
-We thank Thomas Griebel, who demanded a better cover for the book.
-我们感谢 Thomas Griebel，他要求这本书有一个更好的封面。
-
-Although we didn't take his specific suggestion (a dinosaur, can you believe it?), the beautiful picture of Halley's comet would not be found on the cover without him.
-虽然我们要没有采纳他的具体建议（一只恐龙，你敢信？），但如果没有他，封面上就不会有哈雷彗星的美丽照片。
-
-A final debt of gratitude is also owed to Aaron Brown.
-最后还要感谢 Aaron Brown。
-
-His tireless work has vastly improved the state of the projects (particularly those in xv6 land) and thus has helped better the learning experience for countless undergraduates and graduates here at Wisconsin.
-他不懈的工作极大地改善了项目的状况（特别是在 xv6 领域），从而帮助改善了威斯康星大学无数本科生和研究生的学习体验。
-
-As Aaron would say (in his usual succinct manner): "Thx."
-正如 Aaron 会说的那样（以他一贯简洁的方式）：“谢了。”
-
-**Final Words**
-最后的话
-
-Yeats famously said "Education is not the filling of a pail but the lighting of a fire."
-叶芝有句名言：“教育不是注满一桶水，而是点燃一把火。”
-
-He was right but wrong at the same time.
-他是对的，但同时也错了。
-
-You do have to "fill the pail" a bit, and these notes are certainly here to help with that part of your education.
-你确实需要“注满桶”一点，而这些笔记当然是为了帮助你完成那部分教育；
-
-After all, when you go to interview at Google, and they ask you a trick question about how to use semaphores, it might be good to actually know what a semaphore is, right?
-毕竟，当你去 Google 面试时，如果他们问你一个关于如何使用信号量的刁钻问题，真正知道信号量是什么可能会很好，对吧？
-
-But Yeats's larger point is obviously on the mark: the real point of education is to get you interested in something, to learn something more about the subject matter on your own and not just what you have to digest to get a good grade in some class.
-但叶芝更宏大的观点显然是正确的：教育的真正意义在于让你对某事感兴趣，让你自己去学习更多关于该主题的知识，而不仅仅是为了在某门课上取得好成绩而必须消化的东西。
-
-As one of our fathers (Remzi's dad, Vedat Arpaci) used to say, "Learn beyond the classroom".
-正如我们要的一位父亲（Remzi 的父亲，Vedat Arpaci）常说的，“要在课堂之外学习”。
-
-We created these notes to spark your interest in operating systems, to read more about the topic on your own, to talk to your professor about all the exciting research that is going on in the field, and even to get involved with that research.
-我们创建这些笔记是为了激发您对操作系统的兴趣，让您自己阅读更多关于该主题的内容，与您的教授谈论该领域正在进行的所有令人兴奋的研究，甚至参与到该研究中去。
-
-It is a great field(!), full of exciting and wonderful ideas that have shaped computing history in profound and important ways.
-这是一个伟大的领域（！），充满了令人兴奋和奇妙的思想，这些思想以深刻而重要的方式塑造了计算历史。
-
-And while we understand this fire won't light for all of you, we hope it does for many, or even a few.
-虽然我们要明白这把火不会为你们所有人点燃，但我们希望它能为许多人，甚至只是少数人点燃。
-
-Because once that fire is lit, well, that is when you truly become capable of doing something great.
-因为一旦这把火被点燃，那么，那正是你真正有能力做一些伟大的事情的时候。
-
-And thus the real point of the educational process: to go forth, to study many new and fascinating topics, to learn, to mature, and most importantly, to find something that lights a fire for you.
-这就是教育过程的真正意义：勇往直前，研究许多新颖而迷人的话题，学习，成熟，最重要的是，找到能为你点燃心中之火的东西。
-
-Andrea and Remzi
-Andrea 和 Remzi
-
-Married couple
-已婚夫妇
-
-Professors of Computer Science at the University of Wisconsin
-威斯康星大学计算机科学教授
-
-Chief Lighters of Fires, hopefully
-希望能成为首席点火人
-
-**References**
-参考文献
-
-[CK+08] "The xv6 Operating System" by Russ Cox, Frans Kaashoek, Robert Morris, Nickolai Zeldovich.
-[CK+08] 《xv6 操作系统》，作者：Russ Cox, Frans Kaashoek, Robert Morris, Nickolai Zeldovich。
-
-xv6 was developed as a port of the original UNIX version 6 and represents a beautiful, clean, and simple way to understand a modern operating system.
-xv6 是作为原始 UNIX 第 6 版的移植版开发的，代表了一种理解现代操作系统的优美、干净且简单的方式。
-
-[F96] "Six Easy Pieces: Essentials Of Physics Explained By Its Most Brilliant Teacher" by Richard P. Feynman.
-[F96] 《物理之美：费曼物理学讲义入门选》（Six Easy Pieces），作者：Richard P. Feynman。
-
-Basic Books, 1996. This book reprints the six easiest chapters of Feynman's Lectures on Physics, from 1963.
-Basic Books 出版社，1996 年。本书重印了 1963 年《费曼物理学讲义》中最简单的六章。
-
-If you like Physics, it is a fantastic read.
-如果您喜欢物理，这是一本极好的读物。
-
-[HP90] "Computer Architecture a Quantitative Approach" (1st ed.) by David A. Patterson and John L. Hennessy.
-[HP90] 《计算机体系结构：量化研究方法》（第 1 版），作者：David A. Patterson 和 John L. Hennessy。
-
-A book that encouraged each of us at our undergraduate institutions to pursue graduate studies.
-这是一本鼓励我们在本科院校攻读研究生的书。
-
-We later both had the pleasure of working with Patterson, who greatly shaped the foundations of our research careers.
-我们要后来都有幸与 Patterson 共事，他极大地塑造了我们研究生涯的基础。
-
-[KR88] "The C Programming Language" by Brian Kernighan and Dennis Ritchie.
-[KR88] 《C 程序设计语言》，作者：Brian Kernighan 和 Dennis Ritchie。
-
-The C programming reference that everyone should have, by the people who invented the language.
-每个人都应该拥有的 C 编程参考书，由发明该语言的人编写。
-
-[K62] "The Structure of Scientific Revolutions" by Thomas S. Kuhn.
-[K62] 《科学革命的结构》，作者：Thomas S. Kuhn。
-
-A great and famous read about the fundamentals of the scientific process.
-关于科学过程基础的一本伟大而著名的读物。
-
-Mop-up work, anomaly, crisis, and revolution.
-扫尾工作、反常、危机和革命。
-
-We are mostly destined to do mop-up work, alas.
-唉，我们大多数人注定要做扫尾工作。
-
-**Contents**
-目录
-
-1 A Dialogue on the Book
-1 关于本书的对话
-
-2 Introduction to Operating Systems
-2 操作系统介绍
-
-2.1 Virtualizing The CPU
-2.1 CPU 虚拟化
-
-2.2 Virtualizing Memory
-2.2 内存虚拟化
-
-2.3 Concurrency
-2.3 并发
-
-2.4 Persistence
-2.4 持久性
-
-2.5 Design Goals
-2.5 设计目标
-
-2.6 Some History
-2.6 一些历史
-
-2.7 Summary
-2.7 总结
-
-**Part I: Virtualization**
-**第一部分：虚拟化**
-
-3 A Dialogue on Virtualization
-3 关于虚拟化的对话
-
-4 The Abstraction: The Process
-4 抽象：进程
-
-4.1 The Abstraction: A Process
-4.1 抽象：一个进程
-
-4.2 Process API
-4.2 进程 API
-
-4.3 Process Creation: A Little More Detail
-4.3 进程创建：更多细节
-
-4.4 Process States
-4.4 进程状态
-
-4.5 Data Structures
-4.5 数据结构
-
-4.6 Summary
-4.6 总结
-
-5 Interlude: Process API
-5 插曲：进程 API
-
-5.1 The fork() System Call
-5.1 fork() 系统调用
-
-5.2 The wait() System Call
-5.2 wait() 系统调用
-
-5.3 Finally, The exec() System Call
-5.3 最后，exec() 系统调用
-
-5.4 Why? Motivating The API
-5.4 为什么？API 的动机
-
-5.5 Process Control And Users
-5.5 进程控制与用户
-
-5.6 Useful Tools
-5.6 有用的工具
-
-5.7 Summary
-5.7 总结
-
-6 Mechanism: Limited Direct Execution
-6 机制：受限直接执行
-
-6.1 Basic Technique: Limited Direct Execution
-6.1 基本技术：受限直接执行
-
-6.2 Problem #1: Restricted Operations
-6.2 问题 #1：受限操作
-
-6.3 Problem #2: Switching Between Processes
-6.3 问题 #2：在进程间切换
-
-6.4 Worried About Concurrency?
-6.4 担心并发？
-
-6.5 Summary
-6.5 总结
-
-7 Scheduling: Introduction
-7 调度：简介
-
-7.1 Workload Assumptions
-7.1 工作负载假设
-
-7.2 Scheduling Metrics
-7.2 调度指标
-
-7.3 First In, First Out (FIFO)
-7.3 先进先出 (FIFO)
-
-7.4 Shortest Job First (SJF)
-7.4 最短任务优先 (SJF)
-
-7.5 Shortest Time-to-Completion First (STCF)
-7.5 最短完成时间优先 (STCF)
-
-7.6 A New Metric: Response Time
-7.6 一个新指标：响应时间
-
-7.7 Round Robin
-7.7 轮转调度 (Round Robin)
-
-7.8 Incorporating I/O
-7.8 结合 I/O
-
-7.9 No More Oracle
-7.9 不再有预言机
-
-7.10 Summary
-7.10 总结
-
-8 Scheduling: The Multi-Level Feedback Queue
-8 调度：多级反馈队列
-
-8.1 MLFQ: Basic Rules
-8.1 MLFQ：基本规则
-
-8.2 Attempt #1: How To Change Priority
-8.2 尝试 #1：如何改变优先级
-
-8.3 Attempt #2: The Priority Boost
-8.3 尝试 #2：优先级提升
-
-8.4 Attempt #3: Better Accounting
-8.4 尝试 #3：更好的计时
-
-8.5 Tuning MLFQ And Other Issues
-8.5 调优 MLFQ 及其他问题
-
-8.6 MLFQ: Summary
-8.6 MLFQ：总结
-
-9 Scheduling: Proportional Share
-9 调度：比例份额
-
-9.1 Basic Concept: Tickets Represent Your Share
-9.1 基本概念：彩票代表你的份额
-
-9.2 Ticket Mechanisms
-9.2 彩票机制
-
-9.3 Implementation
-9.3 实现
-
-9.4 An Example
-9.4 一个例子
-
-9.5 How To Assign Tickets?
-9.5 如何分配彩票？
-
-9.6 Stride Scheduling
-9.6 步长调度
-
-9.7 The Linux Completely Fair Scheduler (CFS)
-9.7 Linux 完全公平调度器 (CFS)
-
-9.8 Summary
-9.8 总结
-
-10 Multiprocessor Scheduling (Advanced)
-10 多处理器调度（进阶）
-
-10.1 Background: Multiprocessor Architecture
-10.1 背景：多处理器架构
-
-10.2 Don't Forget Synchronization
-10.2 别忘了同步
-
-10.3 One Final Issue: Cache Affinity
-10.3 最后一个问题：缓存亲和性
-
-10.4 Single-Queue Scheduling
-10.4 单队列调度
-
-10.5 Multi-Queue Scheduling
-10.5 多队列调度
-
-10.6 Linux Multiprocessor Schedulers
-10.6 Linux 多处理器调度器
-
-10.7 Summary
-10.7 总结
-
-11 Summary Dialogue on CPU Virtualization
-11 关于 CPU 虚拟化的总结对话
-
-12 A Dialogue on Memory Virtualization
-12 关于内存虚拟化的对话
-
-13 The Abstraction: Address Spaces
-13 抽象：地址空间
-
-13.1 Early Systems
-13.1 早期系统
-
-13.2 Multiprogramming and Time Sharing
-13.2 多道程序设计和分时
-
-13.3 The Address Space
-13.3 地址空间
-
-13.4 Goals
-13.4 目标
-
-13.5 Summary
-13.5 总结
-
-14 Interlude: Memory API
-14 插曲：内存 API
-
-14.1 Types of Memory
-14.1 内存类型
-
-14.2 The malloc() Call
-14.2 malloc() 调用
-
-14.3 The free() Call
-14.3 free() 调用
-
-14.4 Common Errors
-14.4 常见错误
-
-14.5 Underlying OS Support
-14.5 底层操作系统支持
-
-14.6 Other Calls
-14.6 其他调用
-
-14.7 Summary
-14.7 总结
-
-15 Mechanism: Address Translation
-15 机制：地址转换
-
-15.1 Assumptions
-15.1 假设
-
-15.2 An Example
-15.2 一个例子
-
-15.3 Dynamic (Hardware-based) Relocation
-15.3 动态（基于硬件的）重定位
-
-15.4 Hardware Support: A Summary
-15.4 硬件支持：总结
-
-15.5 Operating System Issues
-15.5 操作系统问题
-
-15.6 Summary
-15.6 总结
-
-16 Segmentation
-16 分段
-
-16.1 Segmentation: Generalized Base/Bounds
-16.1 分段：广义的基址/界限
-
-16.2 Which Segment Are We Referring To?
-16.2 我们指的是哪个段？
-
-16.3 What About The Stack?
-16.3 栈怎么办？
-
-16.4 Support for Sharing
-16.4 支持共享
-
-16.5 Fine-grained vs. Coarse-grained Segmentation
-16.5 细粒度与粗粒度分段
-
-16.6 OS Support
-16.6 操作系统支持
-
-16.7 Summary
-16.7 总结
-
-17 Free-Space Management
-17 空闲空间管理
-
-17.1 Assumptions
-17.1 假设
-
-17.2 Low-level Mechanisms
-17.2 低级机制
-
-17.3 Basic Strategies
-17.3 基本策略
-
-17.4 Other Approaches
-17.4 其他方法
-
-17.5 Summary
-17.5 总结
-
-18 Paging: Introduction
-18 分页：简介
-
-18.1 A Simple Example And Overview
-18.1 简单示例与概述
-
-18.2 Where Are Page Tables Stored?
-18.2 页表存在哪里？
-
-18.3 What's Actually In The Page Table?
-18.3 页表里实际上有什么？
-
-18.4 Paging: Also Too Slow
-18.4 分页：也太慢了
-
-18.5 A Memory Trace
-18.5 内存追踪
-
-18.6 Summary
-18.6 总结
-
-19 Paging: Faster Translations (TLBs)
-19 分页：更快的转换 (TLB)
-
-19.1 TLB Basic Algorithm
-19.1 TLB 基本算法
-
-19.2 Example: Accessing An Array
-19.2 示例：访问数组
-
-19.3 Who Handles The TLB Miss?
-19.3 谁来处理 TLB 未命中？
-
-19.4 TLB Contents: What's In There?
-19.4 TLB 内容：里面有什么？
-
-19.5 TLB Issue: Context Switches
-19.5 TLB 问题：上下文切换
-
-19.6 Issue: Replacement Policy
-19.6 问题：替换策略
-
-19.7 A Real TLB Entry
-19.7 真实的 TLB 表项
-
-19.8 Summary
-19.8 总结
-
-20 Paging: Smaller Tables
-20 分页：更小的表
-
-20.1 Simple Solution: Bigger Pages
-20.1 简单的解决方案：更大的页面
-
-20.2 Hybrid Approach: Paging and Segments
-20.2 混合方法：分页和分段
-
-20.3 Multi-level Page Tables
-20.3 多级页表
-
-20.4 Inverted Page Tables
-20.4 反向页表
-
-20.5 Swapping the Page Tables to Disk
-20.5 将页表交换到磁盘
-
-20.6 Summary
-20.6 总结
-
-21 Beyond Physical Memory: Mechanisms
-21 超越物理内存：机制
-
-21.1 Swap Space
-21.1 交换空间
-
-21.2 The Present Bit
-21.2 存在位 (Present Bit)
-
-21.3 The Page Fault
-21.3 页面错误 (Page Fault)
-
-21.4 What If Memory Is Full?
-21.4 如果内存满了怎么办？
-
-21.5 Page Fault Control Flow
-21.5 页面错误控制流
-
-21.6 When Replacements Really Occur
-21.6 替换真正发生的时间
-
-21.7 Summary
-21.7 总结
-
-22 Beyond Physical Memory: Policies
-22 超越物理内存：策略
-
-22.1 Cache Management
-22.1 缓存管理
-
-22.2 The Optimal Replacement Policy
-22.2 最佳替换策略
-
-22.3 A Simple Policy: FIFO
-22.3 一个简单的策略：先进先出 (FIFO)
-
-22.4 Another Simple Policy: Random
-22.4 另一个简单的策略：随机
-
-22.5 Using History: LRU
-22.5 利用历史记录：最近最少使用 (LRU)
-
-22.6 Workload Examples
-22.6 工作负载示例
-
-22.7 Implementing Historical Algorithms
-22.7 实现基于历史的算法
-
-22.8 Approximating LRU
-22.8 近似 LRU
-
-22.9 Considering Dirty Pages
-22.9 考虑脏页
-
-22.10 Other VM Policies
-22.10 其他虚拟内存策略
-
-22.11 Thrashing
-22.11 抖动 (Thrashing)
-
-22.12 Summary
-22.12 总结
-
-23 Complete Virtual Memory Systems
-23 完整的虚拟内存系统
-
-23.1 VAX/VMS Virtual Memory
-23.1 VAX/VMS 虚拟内存
-
-23.2 The Linux Virtual Memory System
-23.2 Linux 虚拟内存系统
-
-23.3 Summary
-23.3 总结
-
-24 Summary Dialogue on Memory Virtualization
-24 关于内存虚拟化的总结对话
-
-**Part II: Concurrency**
-**第二部分：并发**
-
-25 A Dialogue on Concurrency
-25 关于并发的对话
-
-26 Concurrency: An Introduction
-26 并发：简介
-
-26.1 Why Use Threads?
-26.1 为什么要使用线程？
-
-26.2 An Example: Thread Creation
-26.2 一个例子：线程创建
-
-26.3 Why It Gets Worse: Shared Data
-26.3 为什么情况会变糟：共享数据
-
-26.4 The Heart Of The Problem: Uncontrolled Scheduling
-26.4 问题的核心：不受控制的调度
-
-26.5 The Wish For Atomicity
-26.5 对原子性的渴望
-
-26.6 One More Problem: Waiting For Another
-26.6 另一个问题：等待另一个线程
-
-26.7 Summary: Why in OS Class?
-26.7 总结：为什么要在操作系统课上讲？
-
-27 Interlude: Thread API
-27 插曲：线程 API
-
-27.1 Thread Creation
-27.1 线程创建
-
-27.2 Thread Completion
-27.2 线程完成
-
-27.3 Locks
-27.3 锁
-
-27.4 Condition Variables
-27.4 条件变量
-
-27.5 Compiling and Running
-27.5 编译和运行
-
-27.6 Summary
-27.6 总结
-
-28 Locks
-28 锁
-
-28.1 Locks: The Basic Idea
-28.1 锁：基本思想
-
-28.2 Pthread Locks
-28.2 Pthread 锁
-
-28.3 Building A Lock
-28.3 构建锁
-
-28.4 Evaluating Locks
-28.4 评估锁
-
-28.5 Controlling Interrupts
-28.5 控制中断
-
-28.6 A Failed Attempt: Just Using Loads/Stores
-28.6 一次失败的尝试：仅使用加载/存储
-
-28.7 Building Working Spin Locks with Test-And-Set
-28.7 使用测试并设置 (Test-And-Set) 构建工作的自旋锁
-
-28.8 Evaluating Spin Locks
-28.8 评估自旋锁
-
-28.9 Compare-And-Swap
-28.9 比较并交换 (Compare-And-Swap)
-
-28.10 Load-Linked and Store-Conditional
-28.10 链接加载和条件存储 (Load-Linked and Store-Conditional)
-
-28.11 Fetch-And-Add
-28.11 获取并增加 (Fetch-And-Add)
-
-28.12 Too Much Spinning: What Now?
-28.12 自旋过多：现在怎么办？
-
-28.13 A Simple Approach: Just Yield, Baby
-28.13 一个简单的方法：让出 CPU
-
-28.14 Using Queues: Sleeping Instead Of Spinning
-28.14 使用队列：休眠代替自旋
-
-28.15 Different OS, Different Support
-28.15 不同的操作系统，不同的支持
-
-28.16 Two-Phase Locks
-28.16 两阶段锁
-
-28.17 Summary
-28.17 总结
-
-29 Lock-based Concurrent Data Structures
-29 基于锁的并发数据结构
-
-29.1 Concurrent Counters
-29.1 并发计数器
-
-29.2 Concurrent Linked Lists
-29.2 并发链表
-
-29.3 Concurrent Queues
-29.3 并发队列
-
-29.4 Concurrent Hash Table
-29.4 并发哈希表
-
-29.5 Summary
-29.5 总结
-
-30 Condition Variables
-30 条件变量
-
-30.1 Definition and Routines
-30.1 定义和例程
-
-30.2 The Producer/Consumer (Bounded Buffer) Problem
-30.2 生产者/消费者（有界缓冲区）问题
-
-30.3 Covering Conditions
-30.3 覆盖条件
-
-30.4 Summary
-30.4 总结
-
-31 Semaphores
-31 信号量
-
-31.1 Semaphores: A Definition
-31.1 信号量：定义
-
-31.2 Binary Semaphores (Locks)
-31.2 二值信号量（锁）
-
-31.3 Semaphores For Ordering
-31.3 用于排序的信号量
-
-31.4 The Producer/Consumer (Bounded Buffer) Problem
-31.4 生产者/消费者（有界缓冲区）问题
-
-31.5 Reader-Writer Locks
-31.5 读写锁
-
-31.6 The Dining Philosophers
-31.6 哲学家就餐问题
-
-31.7 Thread Throttling
-31.7 线程限流
-
-31.8 How To Implement Semaphores
-31.8 如何实现信号量
-
-31.9 Summary
-31.9 总结
-
-32 Common Concurrency Problems
-32 常见的并发问题
-
-32.1 What Types Of Bugs Exist?
-32.1 存在哪些类型的 Bug？
-
-32.2 Non-Deadlock Bugs
-32.2 非死锁 Bug
-
-32.3 Deadlock Bugs
-32.3 死锁 Bug
-
-32.4 Summary
-32.4 总结
-
-33 Event-based Concurrency (Advanced)
-33 基于事件的并发（进阶）
-
-33.1 The Basic Idea: An Event Loop
-33.1 基本思想：事件循环
-
-33.2 An Important API: select() (or poll())
-33.2 一个重要的 API：select()（或 poll()）
-
-33.3 Using select()
-33.3 使用 select()
-
-33.4 Why Simpler? No Locks Needed
-33.4 为什么更简单？不需要锁
-
-33.5 A Problem: Blocking System Calls
-33.5 一个问题：阻塞系统调用
-
-33.6 A Solution: Asynchronous I/O
-33.6 解决方案：异步 I/O
-
-33.7 Another Problem: State Management
-33.7 另一个问题：状态管理
-
-33.8 What Is Still Difficult With Events
-33.8 事件驱动还有什么困难
-
-33.9 Summary
-33.9 总结
-
-34 Summary Dialogue on Concurrency
-34 关于并发的总结对话
-
-**Part III: Persistence**
-**第三部分：持久性**
-
-35 A Dialogue on Persistence
-35 关于持久性的对话
-
-36 I/O Devices
-36 I/O 设备
-
-36.1 System Architecture
-36.1 系统架构
-
-36.2 A Canonical Device
-36.2 典型设备
-
-36.3 The Canonical Protocol
-36.3 典型协议
-
-36.4 Lowering CPU Overhead With Interrupts
-36.4 使用中断降低 CPU 开销
-
-36.5 More Efficient Data Movement With DMA
-36.5 使用 DMA 进行更高效的数据移动
-
-36.6 Methods Of Device Interaction
-36.6 设备交互方法
-
-36.7 Fitting Into The OS: The Device Driver
-36.7 融入操作系统：设备驱动程序
-
-36.8 Case Study: A Simple IDE Disk Driver
-36.8 案例研究：一个简单的 IDE 磁盘驱动程序
-
-36.9 Historical Notes
-36.9 历史记录
-
-36.10 Summary
-36.10 总结
-
-37 Hard Disk Drives
-37 硬盘驱动器
-
-37.1 The Interface
-37.1 接口
-
-37.2 Basic Geometry
-37.2 基本几何结构
-
-37.3 A Simple Disk Drive
-37.3 一个简单的磁盘驱动器
-
-37.4 I/O Time: Doing The Math
-37.4 I/O 时间：数学计算
-
-37.5 Disk Scheduling
-37.5 磁盘调度
+see the research paper for details, or check out the Linux kernel implementation to see how such ideas are transitioned into practice (if you are the ambitious sort).
+==详情请参阅研究论文，或者查看 Linux 内核的实现，看看这些想法是如何转化为实践的（如果你是有抱负的那类人）。==
 
 37.6 Summary
-37.6 总结
+==37.6 总结==
 
-38 Redundant Arrays of Inexpensive Disks (RAIDs)
-38 廉价磁盘冗余阵列 (RAID)
+We have presented a summary of how disks work.
+==我们已经总结了磁盘是如何工作的。==
+
+The summary is actually a detailed functional model;
+==这个总结实际上是一个详细的功能模型；==
+
+it does not describe the amazing physics, electronics, and material science that goes into actual drive design.
+==它没有描述实际驱动器设计中涉及的惊人的物理学、电子学和材料科学。==
+
+For those interested in even more details of that nature, we suggest a different major (or perhaps minor);
+==对于那些对这些细节感兴趣的人，我们建议选择不同的专业（或许是辅修）；==
+
+for those that are happy with this model, good!
+==对于那些对这个模型感到满意的人，很好！==
+
+We can now proceed to using the model to build more interesting systems on top of these incredible devices.
+==我们现在可以继续利用该模型，在这些不可思议的设备之上构建更有趣的系统。==
+
+References
+==参考文献==
+
+[ADR03] "More Than an Interface: SCSI vs. ATA" by Dave Anderson, Jim Dykes, Erik Riedel.
+==[ADR03] "More Than an Interface: SCSI vs. ATA" 作者：Dave Anderson, Jim Dykes, Erik Riedel。==
+
+FAST '03, 2003. One of the best recent-ish references on how modern disk drives really work;
+==FAST '03, 2003。关于现代磁盘驱动器真正如何工作的最佳近期参考文献之一；==
+
+a must read for anyone interested in knowing more.
+==任何有兴趣了解更多信息的人的必读之作。==
+
+[CKR72] "Analysis of Scanning Policies for Reducing Disk Seek Times" E.G. Coffman, L.A. Klimko, B. Ryan
+==[CKR72] "Analysis of Scanning Policies for Reducing Disk Seek Times" 作者：E.G. Coffman, L.A. Klimko, B. Ryan==
+
+SIAM Journal of Computing, September 1972, Vol 1. No 3. Some of the early work in the field of disk scheduling.
+==SIAM Journal of Computing, 1972 年 9 月, 第 1 卷第 3 期。磁盘调度领域的一些早期工作。==
+
+[HK+17] "The Unwritten Contract of Solid State Drives" by Jun He, Sudarsun Kannan, Andrea C. Arpaci-Dusseau, Remzi H. Arpaci-Dusseau.
+==[HK+17] "The Unwritten Contract of Solid State Drives" 作者：Jun He, Sudarsun Kannan, Andrea C. Arpaci-Dusseau, Remzi H. Arpaci-Dusseau。==
+
+EuroSys '17, Belgrade, Serbia, April 2017. We take the idea of the unwritten contract, and extend it to SSDs.
+==EuroSys '17，塞尔维亚贝尔格莱德，2017 年 4 月。我们采用了不成文契约的想法，并将其扩展到了 SSD。==
+
+Using SSDs well seems as complicated as hard drives, and sometimes more so.
+==用好 SSD 似乎和硬盘一样复杂，有时甚至更复杂。==
+
+[ID01] "Anticipatory Scheduling: A Disk-scheduling Framework To Overcome Deceptive Idleness In Synchronous I/O" by Sitaram Iyer, Peter Druschel.
+==[ID01] "Anticipatory Scheduling: A Disk-scheduling Framework To Overcome Deceptive Idleness In Synchronous I/O" 作者：Sitaram Iyer, Peter Druschel。==
+
+SOSP '01, October 2001. A cool paper showing how waiting can improve disk scheduling: better requests may be on their way!
+==SOSP '01，2001 年 10 月。一篇很酷的论文，展示了等待如何改善磁盘调度：更好的请求可能正在路上！==
+
+[JW91] "Disk Scheduling Algorithms Based On Rotational Position" by D. Jacobson, J. Wilkes.
+==[JW91] "Disk Scheduling Algorithms Based On Rotational Position" 作者：D. Jacobson, J. Wilkes。==
+
+Technical Report HPL-CSP-91-7rev1, Hewlett-Packard, February 1991. A more modern take on disk scheduling.
+==技术报告 HPL-CSP-91-7rev1，惠普，1991 年 2 月。对磁盘调度的更现代的看法。==
+
+It remains a technical report (and not a published paper) because the authors were scooped by Seltzer et al. [SCO90].
+==它仍然是一份技术报告（而不是已发表的论文），因为作者被 Seltzer 等人抢先了一步 [SCO90]。==
+
+[RW92] "An Introduction to Disk Drive Modeling" by C. Ruemmler, J. Wilkes.
+==[RW92] "An Introduction to Disk Drive Modeling" 作者：C. Ruemmler, J. Wilkes。==
+
+IEEE Computer, 27:3, March 1994. A terrific introduction to the basics of disk operation.
+==IEEE Computer, 27:3, 1994 年 3 月。对磁盘操作基础知识极好的介绍。==
+
+Some pieces are out of date, but most of the basics remain.
+==有些部分已经过时，但大部分基础知识仍然适用。==
+
+[SCO90] "Disk Scheduling Revisited" by Margo Seltzer, Peter Chen, John Ousterhout.
+==[SCO90] "Disk Scheduling Revisited" 作者：Margo Seltzer, Peter Chen, John Ousterhout。==
+
+USENIX 1990. A paper that talks about how rotation matters too in the world of disk scheduling.
+==USENIX 1990。一篇讨论在磁盘调度领域中旋转也很重要的论文。==
+
+[SG04] "MEMS-based storage devices and standard disk interfaces: A square peg in a round hole?" Steven W. Schlosser, Gregory R. Ganger
+==[SG04] "MEMS-based storage devices and standard disk interfaces: A square peg in a round hole?" 作者：Steven W. Schlosser, Gregory R. Ganger==
+
+FAST '04, pp. 87-100, 2004. While the MEMS aspect of this paper hasn't yet made an impact, the discussion of the contract between file systems and disks is wonderful and a lasting contribution.
+==FAST '04, pp. 87-100, 2004。虽然这篇论文中关于 MEMS 的方面尚未产生影响，但关于文件系统和磁盘之间契约的讨论非常精彩，是一个持久的贡献。==
+
+We later build on this work to study the "Unwritten Contract of Solid State Drives" [HK+17]
+==我们后来在这项工作的基础上研究了“固态硬盘的不成文契约” [HK+17]==
+
+[S09a] "Barracuda ES.2 data sheet" by Seagate, Inc..
+==[S09a] "Barracuda ES.2 data sheet" 作者：希捷公司（Seagate, Inc.）。==
+
+Available at this website, at least, it was: [http://www.seagate.com/docs/pdf/datasheet/disc/ds_barracuda_es.pdf](http://www.seagate.com/docs/pdf/datasheet/disc/ds_barracuda_es.pdf).
+==该网站提供下载，至少以前是：[http://www.seagate.com/docs/pdf/datasheet/disc/ds_barracuda_es.pdf](http://www.seagate.com/docs/pdf/datasheet/disc/ds_barracuda_es.pdf)。==
+
+A data sheet; read at your own risk.
+==一份数据表；阅读风险自负。==
+
+Risk of what?
+==什么风险？==
+
+Boredom.
+==无聊。==
+
+[S09b] "Cheetah 15K.5" by Seagate, Inc..
+==[S09b] "Cheetah 15K.5" 作者：希捷公司（Seagate, Inc.）。==
+
+Available at this website, we're pretty sure it is: [http://www.seagate.com/docs/pdf/datasheet/disc/ds-cheetah-15k-5-us.pdf](http://www.seagate.com/docs/pdf/datasheet/disc/ds-cheetah-15k-5-us.pdf).
+==该网站提供下载，我们很确定是：[http://www.seagate.com/docs/pdf/datasheet/disc/ds-cheetah-15k-5-us.pdf](http://www.seagate.com/docs/pdf/datasheet/disc/ds-cheetah-15k-5-us.pdf)。==
+
+See above commentary on data sheets.
+==参见上面关于数据表的评论。==
+
+Homework (Simulation)
+==作业（模拟）==
+
+This homework uses disk.py to familiarize you with how a modern hard drive works.
+==本作业使用 `disk.py` 来让你熟悉现代硬盘驱动器是如何工作的。==
+
+It has a lot of different options, and unlike most of the other simulations, has a graphical animator to show you exactly what happens when the disk is in action.
+==它有许多不同的选项，而且与大多数其他模拟不同，它有一个图形动画演示器，向你展示磁盘运行时究竟发生了什么。==
+
+See the README for details.
+==详情请参阅 README。==
+
+1. Compute the seek, rotation, and transfer times for the following sets of requests: `-a 0`, `-a 6`, `-a 30`, `-a 7,30,8`, and finally `-a 10,11,12,13`.
+==2. 计算以下几组请求的寻道、旋转和传输时间：`-a 0`，`-a 6`，`-a 30`，`-a 7,30,8`，最后是 `-a 10,11,12,13`。==
+3. Do the same requests above, but change the seek rate to different values: `-S 2`, `-S 4`, `-S 8`, `-S 10`, `-S 40`, `-S 0.1`.
+==4. 执行与上面相同的请求，但将寻道速率更改为不同的值：`-S 2`，`-S 4`，`-S 8`，`-S 10`，`-S 40`，`-S 0.1`。==
+
+How do the times change?
+==时间是如何变化的？==
+
+3. Do the same requests above, but change the rotation rate: `-R 0.1`, `-R 0.5`, `-R 0.01`.
+==4. 执行与上面相同的请求，但更改旋转速率：`-R 0.1`，`-R 0.5`，`-R 0.01`。==
+
+How do the times change?
+==时间是如何变化的？==
+
+4. FIFO is not always best, e.g., with the request stream `-a 7,30,8`, what order should the requests be processed in?
+==5. 先进先出（FIFO）并不总是最好的，例如，对于请求流 `-a 7,30,8`，应该按什么顺序处理请求？==
+
+Run the shortest seek-time first (SSTF) scheduler (`-p SSTF`) on this workload;
+==在此工作负载上运行最短寻道时间优先（SSTF）调度器（`-p SSTF`）；==
+
+how long should it take (seek, rotation, transfer) for each request to be served?
+==每个请求被服务需要多长时间（寻道、旋转、传输）？==
+
+5. Now use the shortest access-time first (SATF) scheduler (`-p SATF`).
+==6. 现在使用最短访问时间优先（SATF）调度器（`-p SATF`）。==
+
+Does it make any difference for `-a 7,30,8` workload?
+==这对于 `-a 7,30,8` 工作负载有什么区别吗？==
+
+Find a set of requests where SATF outperforms SSTF;
+==找到一组 SATF 优于 SSTF 的请求；==
+
+more generally, when is SATF better than SSTF?
+==更一般地讲，SATF 什么时候比 SSTF 更好？==
+
+6. Here is a request stream to try: `-a 10,11,12,13`.
+==7. 这里有一个可以尝试的请求流：`-a 10,11,12,13`。==
+
+What goes poorly when it runs?
+==运行时什么地方表现得很差？==
+
+Try adding track skew to address this problem (`-o skew`).
+==尝试添加磁道倾斜（track skew）来解决这个问题（`-o skew`）。==
+
+Given the default seek rate, what should the skew be to maximize performance?
+==在给定默认寻道速率的情况下，倾斜度应该是多少才能使性能最大化？==
+
+What about for different seek rates (e.g., `-S 2`, `-S 4`)?
+==对于不同的寻道速率（例如 `-S 2`，`-S 4`）呢？==
+
+In general, could you write a formula to figure out the skew?
+==总的来说，你能写一个公式来计算倾斜度吗？==
+
+7. Specify a disk with different density per zone, e.g., `-z 10,20,30`, which specifies the angular difference between blocks on the outer, middle, and inner tracks.
+==8. 指定一个各区域密度不同的磁盘，例如 `-z 10,20,30`，它指定了外圈、中间和内圈磁道上块之间的角度差。==
+
+Run some random requests (e.g., `-a -1 -A 5,-1,0`, which specifies that random requests should be used via the `-a -1` flag and that five requests ranging from 0 to the max be generated), and compute the seek, rotation, and transfer times.
+==运行一些随机请求（例如 `-a -1 -A 5,-1,0`，它通过 `-a -1` 标志指定应使用随机请求，并生成 5 个范围从 0 到最大值的请求），并计算寻道、旋转和传输时间。==
+
+Use different random seeds.
+==使用不同的随机种子。==
+
+What is the bandwidth (in sectors per unit time) on the outer, middle, and inner tracks?
+==外圈、中间和内圈磁道的带宽（每单位时间的扇区数）是多少？==
+
+8. A scheduling window determines how many requests the disk can examine at once.
+==9. 调度窗口决定了磁盘一次可以检查多少个请求。==
+
+Generate random workloads (e.g., `-A 1000,-1,0`, with different seeds) and see how long the SATF scheduler takes when the scheduling window is changed from 1 up to the number of requests.
+==生成随机工作负载（例如 `-A 1000,-1,0`，使用不同的种子），并观察当调度窗口从 1 变为请求总数时，SATF 调度器需要多长时间。==
+
+How big of a window is needed to maximize performance?
+==多大的窗口才能使性能最大化？==
+
+Hint: use the flag and don't turn on graphics (`-G`) to run these quickly.
+==提示：使用该标志且不要打开图形界面（`-G`）以快速运行这些。==
+
+When the scheduling window is set to 1, does it matter which policy you are using?
+==当调度窗口设置为 1 时，使用哪种策略有关系吗？==
+
+9. Create a series of requests to starve a particular request, assuming an SATF policy.
+==10. 创建一系列请求来“饿死”某个特定请求，假设使用的是 SATF 策略。==
+
+Given that sequence, how does it perform if you use a bounded SATF (BSATF) scheduling approach?
+==给定该序列，如果你使用有界 SATF（BSATF）调度方法，它的表现如何？==
+
+In this approach, you specify the scheduling window (e.g., `-w 4`);
+==在这种方法中，你指定调度窗口（例如 `-w 4`）；==
+
+the scheduler only moves onto the next window of requests when all requests in the current window have been serviced.
+==调度器只有在当前窗口中的所有请求都得到服务后，才会移动到下一个请求窗口。==
+
+Does this solve starvation?
+==这解决了饥饿问题吗？==
+
+How does it perform, as compared to SATF?
+==与 SATF 相比，它的表现如何？==
+
+In general, how should a disk make this trade-off between performance and starvation avoidance?
+==一般来说，磁盘应该如何在性能和避免饥饿之间进行权衡？==
+
+10. All the scheduling policies we have looked at thus far are greedy;
+==11. 到目前为止，我们看到的所有调度策略都是贪婪的；==
+
+they pick the next best option instead of looking for an optimal schedule.
+==它们挑选下一个最佳选项，而不是寻找最佳时间表。==
+
+Can you find a set of requests in which greedy is not optimal?
+==你能找到一组贪婪算法并非最优的请求吗？==
+
+Redundant Arrays of Inexpensive Disks (RAIDS)
+==廉价磁盘冗余阵列（RAID）==
+
+38
+38
+
+When we use a disk, we sometimes wish it to be faster;
+==当我们要使用磁盘时，有时候希望它能更快；==
+
+ operations are slow and thus can be the bottleneck for the entire system.
+==I/O 操作很慢，因此可能成为整个系统的瓶颈。==
+
+When we use a disk, we sometimes wish it to be larger;
+==当我们要使用磁盘时，有时候希望它能更大；==
+
+more and more data is being put online and thus our disks are getting fuller and fuller.
+==越来越多的数据被放到网上，因此我们的磁盘变得越来越满。==
+
+When we use a disk, we sometimes wish for it to be more reliable;
+==当我们要使用磁盘时，有时候希望它更可靠；==
+
+when a disk fails, if our data isn't backed up, all that valuable data is gone.
+==当磁盘发生故障时，如果我们的数据没有备份，所有那些宝贵的数据都会丢失。==
+
+CRUX: HOW TO MAKE A LARGE, FAST, RELIABLE DISK
+==关键问题：如何构建大容量、快速且可靠的磁盘==
+
+How can we make a large, fast, and reliable storage system?
+==我们要如何构建一个大容量、快速且可靠的存储系统？==
+
+What are the key techniques?
+==关键技术有哪些？==
+
+What are trade-offs between different approaches?
+==不同方法之间的权衡是什么？==
+
+In this chapter, we introduce the Redundant Array of Inexpensive Disks better known as RAID [P+88], a technique to use multiple disks in concert to build a faster, bigger, and more reliable disk system.
+==在本章中，我们将介绍廉价磁盘冗余阵列，即人们熟知的 RAID [P+88]，这是一种协同使用多个磁盘来构建更快、更大、更可靠的磁盘系统的技术。==
+
+The term was introduced in the late 1980s by a group of researchers at U.C. Berkeley (led by Professors David Patterson and Randy Katz and then student Garth Gibson);
+==这个术语是 20 世纪 80 年代末由加州大学伯克利分校的一组研究人员（由 David Patterson 教授和 Randy Katz 教授以及当时的学生 Garth Gibson 领导）提出的；==
+
+it was around this time that many different researchers simultaneously arrived upon the basic idea of using multiple disks to build a better storage system [BG88, K86, K88, PB86, SG86].
+==大约在这个时候，许多不同的研究人员不约而同地得出了利用多个磁盘构建更好存储系统的基本想法 [BG88, K86, K88, PB86, SG86]。==
+
+Externally, a RAID looks like a disk: a group of blocks one can read or write.
+==在外部看来，RAID 就像一个磁盘：一组可以读写的块。==
+
+Internally, the RAID is a complex beast, consisting of multiple disks, memory (both volatile and non-), and one or more processors to manage the system.
+==在内部，RAID 是一个复杂的庞然大物，由多个磁盘、内存（易失性和非易失性）以及一个或多个用于管理系统的处理器组成。==
+
+A hardware RAID is very much like a computer system, specialized for the task of managing a group of disks.
+==硬件 RAID 非常像一个计算机系统，专门用于管理一组磁盘的任务。==
+
+RAIDs offer a number of advantages over a single disk.
+==RAID 相比单个磁盘提供了许多优势。==
+
+One advantage is performance.
+==一个优势是性能。==
+
+Using multiple disks in parallel can greatly speed up  times.
+==并行使用多个磁盘可以大大加快 I/O 速度。==
+
+Another benefit is capacity.
+==另一个好处是容量。==
+
+Large data sets demand large disks.
+==大数据集需要大磁盘。==
+
+Finally, RAIDs can improve reliability;
+==最后，RAID 可以提高可靠性；==
+
+spreading data across multiple disks (without RAID techniques) makes the data vulnerable to the loss of a single disk;
+==将数据分散到多个磁盘（不使用 RAID 技术）会使数据容易因单个磁盘丢失而受损；==
+
+with some form of redundancy, RAIDs can tolerate the loss of a disk and keep operating as if nothing were wrong.
+==通过某种形式的冗余，RAID 可以容忍磁盘丢失并像什么都没发生一样继续运行。==
+
+TIP: TRANSPARENCY ENABLES DEPLOYMENT
+==提示：透明性有助于部署==
+
+When considering how to add new functionality to a system, one should always consider whether such functionality can be added transparently, in a way that demands no changes to the rest of the system.
+==当考虑如何向系统添加新功能时，应始终考虑是否可以透明地添加该功能，即不需要更改系统的其余部分。==
+
+Requiring a complete rewrite of the existing software (or radical hardware changes) lessens the chance of impact of an idea.
+==要求完全重写现有软件（或彻底的硬件更改）会降低一个想法产生影响的机会。==
+
+RAID is a perfect example, and certainly its transparency contributed to its success;
+==RAID 是一个完美的例子，它的透明性无疑促成了它的成功；==
+
+administrators could install a SCSI-based RAID storage array instead of a SCSI disk, and the rest of the system (host computer, OS, etc.) did not have to change one bit to start using it.
+==管理员可以安装基于 SCSI 的 RAID 存储阵列来代替 SCSI 磁盘，而系统的其余部分（主机、操作系统等）完全不需要更改即可开始使用它。==
+
+By solving this problem of deployment, RAID was made more successful from day one.
+==通过解决这个部署问题，RAID 从第一天起就更加成功。==
+
+Amazingly, RAIDs provide these advantages transparently to systems that use them, i.e., a RAID just looks like a big disk to the host system.
+==令人惊讶的是，RAID 透明地向使用它们的系统提供这些优势，也就是说，RAID 在主机系统看来就像一个大磁盘。==
+
+The beauty of transparency, of course, is that it enables one to simply replace a disk with a RAID and not change a single line of software;
+==当然，透明之美在于它使人们可以简单地用 RAID 替换磁盘，而无需更改任何一行软件代码；==
+
+the operating system and client applications continue to operate without modification.
+==操作系统和客户端应用程序无需修改即可继续运行。==
+
+In this manner, transparency greatly improves the deployability of RAID, enabling users and administrators to put a RAID to use without worries of software compatibility.
+==通过这种方式，透明性极大地提高了 RAID 的可部署性，使用户和管理员能够使用 RAID 而无需担心软件兼容性。==
+
+We now discuss some of the important aspects of RAIDs.
+==我们现在讨论 RAID 的一些重要方面。==
+
+We begin with the interface, fault model, and then discuss how one can evaluate a RAID design along three important axes: capacity, reliability, and performance.
+==我们从接口、故障模型开始，然后讨论如何沿三个重要轴线评估 RAID 设计：容量、可靠性和性能。==
+
+We then discuss a number of other issues that are important to RAID design and implementation.
+==然后我们将讨论对 RAID 设计和实现很重要的其他一些问题。==
 
 38.1 Interface And RAID Internals
-38.1 接口和 RAID 内部结构
+==38.1 接口和 RAID 内部结构==
+
+To a file system above, a RAID looks like a big, (hopefully) fast, and (hopefully) reliable disk.
+==对于上层的文件系统来说，RAID 看起来像是一个大的、（希望是）快速的、（希望是）可靠的磁盘。==
+
+Just as with a single disk, it presents itself as a linear array of blocks, each of which can be read or written by the file system (or other client).
+==就像单个磁盘一样，它呈现为一个线性的块数组，文件系统（或其他客户端）可以读取或写入其中的每一个块。==
+
+When a file system issues a logical I/O request to the RAID, the RAID internally must calculate which disk (or disks) to access in order to complete the request, and then issue one or more physical I/Os to do so.
+==当文件系统向 RAID 发出逻辑 I/O 请求时，RAID 内部必须计算要访问哪个（或哪些）磁盘以完成请求，然后发出一各或多个物理 I/O 来执行此操作。==
+
+The exact nature of these physical I/Os depends on the RAID level, as we will discuss in detail below.
+==这些物理 I/O 的确切性质取决于 RAID 级别，我们将在下面详细讨论。==
+
+However, as a simple example, consider a RAID that keeps two copies of each block (each one on a separate disk);
+==然而，作为一个简单的例子，考虑一个保留每个块的两个副本的 RAID（每个副本在单独的磁盘上）；==
+
+when writing to such a mirrored RAID system, the RAID will have to perform two physical I/Os for every one logical I/O it is issued.
+==当向这样的镜像 RAID 系统写入时，RAID 必须为发出的每一个逻辑 I/O 执行两个物理 I/O。==
+
+A RAID system is often built as a separate hardware box, with a standard connection (e.g., SCSI, or SATA) to a host.
+==RAID 系统通常被构建为一个独立的硬件盒，通过标准连接（例如 SCSI 或 SATA）连接到主机。==
+
+Internally, however, RAIDs are fairly complex, consisting of a microcontroller that runs firmware to direct the operation of the RAID, volatile memory such as DRAM to buffer data blocks as they are read and written, and in some cases, non-volatile memory to buffer writes safely and perhaps even specialized logic to perform parity calculations (useful in some RAID levels, as we will also see below).
+==然而在内部，RAID 相当复杂，包括运行固件以指导 RAID 操作的微控制器，用于在读写时缓冲数据块的易失性内存（如 DRAM），在某些情况下，还有用于安全缓冲写入的非易失性内存，甚至可能有用于执行奇偶校验计算的专用逻辑（在某些 RAID 级别中有用，我们也将在下面看到）。==
+
+At a high level, a RAID is very much a specialized computer system: it has a processor, memory, and disks;
+==从高层来看，RAID 非常像一个专用的计算机系统：它有处理器、内存和磁盘；==
+
+however, instead of running applications, it runs specialized software designed to operate the RAID.
+==然而，它不是运行应用程序，而是运行专门设计用来操作 RAID 的软件。==
 
 38.2 Fault Model
-38.2 故障模型
+==38.2 故障模型==
+
+To understand RAID and compare different approaches, we must have a fault model in mind.
+==要理解 RAID 并比较不同的方法，我们必须在脑海中有一个故障模型。==
+
+RAIDs are designed to detect and recover from certain kinds of disk faults;
+==RAID 旨在检测并从某些类型的磁盘故障中恢复；==
+
+thus, knowing exactly which faults to expect is critical in arriving upon a working design.
+==因此，确切地知道预期会有哪些故障对于达成一个有效的设计至关重要。==
+
+The first fault model we will assume is quite simple, and has been called the fail-stop fault model [S84].
+==我们将假设的第一个故障模型非常简单，被称为故障-停止（fail-stop）故障模型 [S84]。==
+
+In this model, a disk can be in exactly one of two states: working or failed.
+==在这个模型中，磁盘只能处于两种状态之一：工作或故障。==
+
+With a working disk, all blocks can be read or written.
+==工作中的磁盘，所有块都可以读写。==
+
+In contrast, when a disk has failed, we assume it is permanently lost.
+==相反，当磁盘发生故障时，我们假设它永久丢失了。==
+
+One critical aspect of the fail-stop model is what it assumes about fault detection.
+==故障-停止模型的一个关键方面是它对故障检测的假设。==
+
+Specifically, when a disk has failed, we assume that this is easily detected.
+==具体来说，当磁盘发生故障时，我们假设这很容易被检测到。==
+
+For example, in a RAID array, we would assume that the RAID controller hardware (or software) can immediately observe when a disk has failed.
+==例如，在 RAID 阵列中，我们会假设 RAID 控制器硬件（或软件）可以立即观察到磁盘何时发生故障。==
+
+Thus, for now, we do not have to worry about more complex "silent" failures such as disk corruption.
+==因此，目前我们不必担心更复杂的“静默”故障，如磁盘损坏。==
+
+We also do not have to worry about a single block becoming inaccessible upon an otherwise working disk (sometimes called a latent sector error).
+==我们也不必担心在其他方面工作正常的磁盘上单个块变得无法访问（有时称为潜在扇区错误）。==
+
+We will consider these more complex (and unfortunately, more realistic) disk faults later.
+==我们稍后将考虑这些更复杂（不幸的是，也更现实）的磁盘故障。==
 
 38.3 How To Evaluate A RAID
-38.3 如何评估 RAID
+==38.3 如何评估 RAID==
+
+As we will soon see, there are a number of different approaches to building a RAID.
+==正如我们将很快看到的，构建 RAID 有许多不同的方法。==
+
+Each of these approaches has different characteristics which are worth evaluating, in order to understand their strengths and weaknesses.
+==每种方法都有值得评估的不同特征，以便了解它们的优缺点。==
+
+Specifically, we will evaluate each RAID design along three axes.
+==具体来说，我们将沿三个轴线评估每种 RAID 设计。==
+
+The first axis is capacity;
+==第一个轴线是容量；==
+
+given a set of N disks each with B blocks, how much useful capacity is available to clients of the RAID?
+==给定一组 N 个磁盘，每个磁盘有 B 个块，RAID 客户端可用的有用容量是多少？==
+
+Without redundancy, the answer is ; in contrast, if we have a system that keeps two copies of each block (called mirroring), we obtain a useful capacity of .
+==没有冗余时，答案是 ；相反，如果我们有一个保留每个块两个副本的系统（称为镜像），我们将获得  的有用容量。==
+
+Different schemes (e.g., parity-based ones) tend to fall in between.
+==不同的方案（例如基于奇偶校验的方案）往往介于两者之间。==
+
+The second axis of evaluation is reliability.
+==评估的第二个轴线是可靠性。==
+
+How many disk faults can the given design tolerate?
+==给定的设计可以容忍多少个磁盘故障？==
+
+In alignment with our fault model, we assume only that an entire disk can fail;
+==根据我们的故障模型，我们假设只有整个磁盘会发生故障；==
+
+in later chapters (i.e., on data integrity), we'll think about how to handle more complex failure modes.
+==在后面的章节（即关于数据完整性的章节）中，我们将思考如何处理更复杂的故障模式。==
+
+Finally, the third axis is performance.
+==最后，第三个轴线是性能。==
+
+Performance is somewhat challenging to evaluate, because it depends heavily on the workload presented to the disk array.
+==性能评估有些挑战性，因为它在很大程度上取决于提交给磁盘阵列的工作负载。==
+
+Thus, before evaluating performance, we will first present a set of typical workloads that one should consider.
+==因此，在评估性能之前，我们将首先提出一组应考虑的典型工作负载。==
+
+We now consider three important RAID designs: RAID Level 0 (striping), RAID Level 1 (mirroring), and RAID Levels 4/5 (parity-based redundancy).
+==我们现在考虑三种重要的 RAID 设计：RAID 0 级（条带化）、RAID 1 级（镜像）和 RAID 4/5 级（基于奇偶校验的冗余）。==
+
+The naming of each of these designs as a "level" stems from the pioneering work of Patterson, Gibson, and Katz at Berkeley [P+88].
+==将这些设计中的每一个命名为“级别”源于伯克利的 Patterson、Gibson 和 Katz 的开创性工作 [P+88]。==
 
 38.4 RAID Level 0: Striping
-38.4 RAID 0 级：条带化
+==38.4 RAID 0 级：条带化==
+
+The first RAID level is actually not a RAID level at all, in that there is no redundancy.
+==第一个 RAID 级别实际上根本不是 RAID 级别，因为它没有冗余。==
+
+However, RAID level 0, or striping as it is better known, serves as an excellent upper-bound on performance and capacity and thus is worth understanding.
+==然而，RAID 0 级，或者更为人熟知的条带化，是性能和容量的极好上限，因此值得理解。==
+
+The simplest form of striping will stripe blocks across the disks of the system as follows (assume here a 4-disk array):
+==最简单的条带化形式将在系统的磁盘上条带化块，如下所示（这里假设是一个 4 磁盘阵列）：==
+
+Figure 38.1: RAID-0: Simple Striping
+==图 38.1：RAID-0：简单条带化==
+
+From Figure 38.1, you get the basic idea: spread the blocks of the array across the disks in a round-robin fashion.
+==从图 38.1 中，你得到了基本思路：以轮询方式将阵列的块分散到磁盘上。==
+
+This approach is designed to extract the most parallelism from the array when requests are made for contiguous chunks of the array (as in a large, sequential read, for example).
+==这种方法旨在当请求阵列的连续块时（例如在大型顺序读取中），从阵列中提取最大的并行性。==
+
+We call the blocks in the same row a stripe;
+==我们将同一行中的块称为一个条带；==
+
+thus, blocks 0, 1, 2, and 3 are in the same stripe above.
+==因此，上面的块 0、1、2 和 3 处于同一个条带中。==
+
+In the example, we have made the simplifying assumption that only 1 block (each of say size 4KB) is placed on each disk before moving on to the next.
+==在这个例子中，我们做了一个简化的假设，即在移至下一个磁盘之前，每个磁盘上只放置 1 个块（每个大小约为 4KB）。==
+
+However, this arrangement need not be the case.
+==然而，这种安排不一定是必须的。==
+
+For example, we could arrange the blocks across disks as in Figure 38.2:
+==例如，我们可以像图 38.2 那样在磁盘上排列块：==
+
+Figure 38.2: Striping With A Bigger Chunk Size
+==图 38.2：具有更大块大小的条带化==
+
+In this example, we place two 4KB blocks on each disk before moving on to the next disk.
+==在这个例子中，我们在移至下一个磁盘之前，在每个磁盘上放置两个 4KB 的块。==
+
+Thus, the chunk size of this RAID array is 8KB, and a stripe thus consists of 4 chunks or 32KB of data.
+==因此，这个 RAID 阵列的块大小是 8KB，一个条带因此由 4 个块或 32KB 数据组成。==
+
+ASIDE: THE RAID MAPPING PROBLEM
+==旁注：RAID 映射问题==
+
+Before studying the capacity, reliability, and performance characteristics of the RAID, we first present an aside on what we call the mapping problem.
+==在研究 RAID 的容量、可靠性和性能特征之前，我们首先插入一段关于我们所谓的映射问题的讨论。==
+
+This problem arises in all RAID arrays;
+==这个问题出现在所有的 RAID 阵列中；==
+
+simply put, given a logical block to read or write, how does the RAID know exactly which physical disk and offset to access?
+==简单地说，给定一个要读写的逻辑块，RAID 如何确切地知道要访问哪个物理磁盘和偏移量？==
+
+For these simple RAID levels, we do not need much sophistication in order to correctly map logical blocks onto their physical locations.
+==对于这些简单的 RAID 级别，我们不需要太复杂的技术就能正确地将逻辑块映射到它们的物理位置。==
+
+Take the first striping example above (chunk size = 1 block = 4KB).
+==以上面的第一个条带化示例为例（块大小 = 1 个块 = 4KB）。==
+
+In this case, given a logical block address A, the RAID can easily compute the desired disk and offset with two simple equations:
+==在这种情况下，给定逻辑块地址 A，RAID 可以用两个简单的方程轻松计算出所需的磁盘和偏移量：==
+
+Disk = A % number_of_disks
+==磁盘 = A % 磁盘数量==
+
+Offset = A / number_of_disks
+==偏移量 = A / 磁盘数量==
+
+Note that these are all integer operations (e.g.,  not 1.33333...).
+==注意这些都是整数运算（例如， 而不是 1.33333...）。==
+
+Let's see how these equations work for a simple example.
+==让我们看一个简单的例子，看看这些方程是如何工作的。==
+
+Imagine in the first RAID above that a request arrives for block 14.
+==想象在上面的第一个 RAID 中，来了一个对块 14 的请求。==
+
+Given that there are 4 disks, this would mean that the disk we are interested in is (): disk 2.
+==鉴于有 4 个磁盘，这意味着我们感兴趣的磁盘是 ()：磁盘 2。==
+
+The exact block is calculated as (): block 3.
+==具体的块计算为 ()：块 3。==
+
+Thus, block 14 should be found on the fourth block (block 3, starting at 0) of the third disk (disk 2, starting at 0), which is exactly where it is.
+==因此，块 14 应该位于第三个磁盘（磁盘 2，从 0 开始）的第四个块（块 3，从 0 开始）上，这正是它所在的位置。==
+
+You can think about how these equations would be modified to support different chunk sizes.
+==你可以思考一下如何修改这些方程以支持不同的块大小。==
+
+Try it!
+==试一试！==
+
+It's not too hard.
+==并不太难。==
+
+Chunk Sizes
+==块大小（Chunk Sizes）==
+
+Chunk size mostly affects performance of the array.
+==块大小主要影响阵列的性能。==
+
+For example, a small chunk size implies that many files will get striped across many disks, thus increasing the parallelism of reads and writes to a single file;
+==例如，较小的块大小意味着许多文件将被条带化到许多磁盘上，从而增加了对单个文件的读写并行性；==
+
+however, the positioning time to access blocks across multiple disks increases, because the positioning time for the entire request is determined by the maximum of the positioning times of the requests across all drives.
+==然而，跨多个磁盘访问块的定位时间会增加，因为整个请求的定位时间由所有驱动器上请求的定位时间的最大值决定。==
+
+A big chunk size, on the other hand, reduces such intra-file parallelism, and thus relies on multiple concurrent requests to achieve high throughput.
+==另一方面，大的块大小减少了这种文件内并行性，因此依赖于多个并发请求来实现高吞吐量。==
+
+However, large chunk sizes reduce positioning time;
+==然而，大的块大小减少了定位时间；==
+
+if, for example, a single file fits within a chunk and thus is placed on a single disk, the positioning time incurred while accessing it will just be the positioning time of a single disk.
+==例如，如果单个文件适合放入一个块中，从而被放置在单个磁盘上，那么访问它时产生的定位时间将仅仅是单个磁盘的定位时间。==
+
+Thus, determining the "best" chunk size is hard to do, as it requires a great deal of knowledge about the workload presented to the disk system [CL95].
+==因此，确定“最佳”块大小很难，因为它需要大量关于提交给磁盘系统的工作负载的知识 [CL95]。==
+
+For the rest of this discussion, we will assume that the array uses a chunk size of a single block (4KB).
+==在接下来的讨论中，我们将假设阵列使用单个块（4KB）的块大小。==
+
+Most arrays use larger chunk sizes (e.g., 64 KB), but for the issues we discuss below, the exact chunk size does not matter;
+==大多数阵列使用更大的块大小（例如 64 KB），但对于我们下面讨论的问题，确切的块大小并不重要；==
+
+thus we use a single block for the sake of simplicity.
+==因此为简单起见，我们使用单个块。==
+
+Back To RAID-0 Analysis
+==回到 RAID-0 分析==
+
+Let us now evaluate the capacity, reliability, and performance of striping.
+==现在让我们评估条带化的容量、可靠性和性能。==
+
+From the perspective of capacity, it is perfect: given N disks each of size B blocks, striping delivers  blocks of useful capacity.
+==从容量的角度来看，它是完美的：给定 N 个大小为 B 块的磁盘，条带化提供  块的有用容量。==
+
+From the standpoint of reliability, striping is also perfect, but in the bad way: any disk failure will lead to data loss.
+==从可靠性的角度来看，条带化也是完美的，但是是糟糕的那种：任何磁盘故障都会导致数据丢失。==
+
+Finally, performance is excellent: all disks are utilized, often in parallel, to service user  requests.
+==最后，性能非常好：所有磁盘都被利用，通常是并行地，来服务用户的 I/O 请求。==
+
+Evaluating RAID Performance
+==评估 RAID 性能==
+
+In analyzing RAID performance, one can consider two different performance metrics.
+==在分析 RAID 性能时，可以考虑两个不同的性能指标。==
+
+The first is single-request latency.
+==第一个是单请求延迟。==
+
+Understanding the latency of a single  request to a RAID is useful as it reveals how much parallelism can exist during a single logical  operation.
+==了解 RAID 单个 I/O 请求的延迟很有用，因为它揭示了在单个逻辑 I/O 操作期间可以存在多少并行性。==
+
+The second is steady-state throughput of the RAID, i.e., the total bandwidth of many concurrent requests.
+==第二个是 RAID 的稳态吞吐量，即许多并发请求的总带宽。==
+
+Because RAIDs are often used in high-performance environments, the steady-state bandwidth is critical, and thus will be the main focus of our analyses.
+==由于 RAID 通常用于高性能环境，因此稳态带宽至关重要，因此将成为我们分析的重点。==
+
+To understand throughput in more detail, we need to put forth some workloads of interest.
+==为了更详细地理解吞吐量，我们需要提出一些感兴趣的工作负载。==
+
+We will assume, for this discussion, that there are two types of workloads: sequential and random.
+==在这个讨论中，我们将假设有两种类型的工作负载：顺序的和随机的。==
+
+With a sequential workload, we assume that requests to the array come in large contiguous chunks;
+==对于顺序工作负载，我们假设对阵列的请求是以大的连续块形式出现的；==
+
+for example, a request (or series of requests) that accesses 1 MB of data, starting at block  and ending at block , would be deemed sequential.
+==例如，访问 1 MB 数据的请求（或一系列请求），从块  开始并在块  结束，将被视为顺序的。==
+
+Sequential workloads are common in many environments (think of searching through a large file for a keyword), and thus are considered important.
+==顺序工作负载在许多环境中都很常见（想想在大型文件中搜索关键字），因此被认为是重要的。==
+
+For random workloads, we assume that each request is rather small, and that each request is to a different random location on disk.
+==对于随机工作负载，我们假设每个请求都相当小，并且每个请求都指向磁盘上不同的随机位置。==
+
+For example, a random stream of requests may first access 4KB at logical address 10, then at logical address 550,000, then at 20,100, and so forth.
+==例如，随机请求流可能首先访问逻辑地址 10 处的 4KB，然后在逻辑地址 550,000 处，然后在 20,100 处，依此类推。==
+
+Some important workloads, such as transactional workloads on a database management system (DBMS), exhibit this type of access pattern, and thus it is considered an important workload.
+==一些重要的工作负载，如数据库管理系统（DBMS）上的事务性工作负载，表现出这种类型的访问模式，因此它被认为是一种重要的工作负载。==
+
+Of course, real workloads are not so simple, and often have a mix of sequential and random-seeming components as well as behaviors in-between the two.
+==当然，实际的工作负载并不是那么简单，通常混合了顺序和看似随机的成分，以及介于两者之间的行为。==
+
+For simplicity, we just consider these two possibilities.
+==为了简单起见，我们只考虑这两种可能性。==
+
+As you can tell, sequential and random workloads will result in widely different performance characteristics from a disk.
+==正如你所知，顺序和随机工作负载将导致磁盘产生截然不同的性能特征。==
+
+With sequential access, a disk operates in its most efficient mode, spending little time seeking and waiting for rotation and most of its time transferring data.
+==对于顺序访问，磁盘以其最高效的模式运行，花费很少的时间寻道和等待旋转，而大部分时间用于传输数据。==
+
+With random access, just the opposite is true: most time is spent seeking and waiting for rotation and relatively little time is spent transferring data.
+==对于随机访问，情况正好相反：大部分时间花在寻道和等待旋转上，相对较少的时间花在传输数据上。==
+
+To capture this difference in our analysis, we will assume that a disk can transfer data at  under a sequential workload, and  when under a random workload.
+==为了在我们的分析中捕捉这种差异，我们将假设磁盘在顺序工作负载下可以以  的速度传输数据，而在随机工作负载下以  的速度传输。==
+
+In general, S is much greater than R (i.e., ).
+==通常，S 远大于 R（即 ）。==
+
+To make sure we understand this difference, let's do a simple exercise.
+==为了确保我们理解这种差异，让我们做一个简单的练习。==
+
+Specifically, let's calculate S and R given the following disk characteristics.
+==具体来说，让我们根据以下磁盘特性计算 S 和 R。==
+
+Assume a sequential transfer of size 10 MB on average, and a random transfer of 10 KB on average.
+==假设平均顺序传输大小为 10 MB，平均随机传输大小为 10 KB。==
+
+Also, assume the following disk characteristics:
+==此外，假设以下磁盘特性：==
+
+Average seek time: 7 ms
+==平均寻道时间：7 ms==
+
+Average rotational delay: 3 ms
+==平均旋转延迟：3 ms==
+
+Transfer rate of disk: 
+==磁盘传输速率：==
+
+To compute S, we need to first figure out how time is spent in a typical 10 MB transfer.
+==为了计算 S，我们需要首先弄清楚典型的 10 MB 传输是如何花费时间的。==
+
+First, we spend 7 ms seeking, and then 3 ms rotating.
+==首先，我们花费 7 ms 寻道，然后 3 ms 旋转。==
+
+Finally, transfer begins;
+==最后，传输开始；==
+
+10 MB @ 50  leads to  of a second, or 200 ms, spent in transfer.
+==10 MB @ 50  导致花费  秒，即 200 ms 进行传输。==
+
+Thus, for each 10 MB request, we spend 210 ms completing the request.
+==因此，对于每个 10 MB 请求，我们花费 210 ms 完成请求。==
+
+To compute S, we just need to divide:
+==要计算 S，我们只需进行除法：==
+
+
+
+
+As we can see, because of the large time spent transferring data, S is very near the peak bandwidth of the disk (the seek and rotational costs have been amortized).
+==我们可以看到，由于大部分时间花在传输数据上，S 非常接近磁盘的峰值带宽（寻道和旋转成本已被摊销）。==
+
+We can compute R similarly.
+==我们可以类似地计算 R。==
+
+Seek and rotation are the same;
+==寻道和旋转是一样的；==
+
+we then compute the time spent in transfer, which is 10 KB @ 50  or 0.195 ms.
+==然后我们计算传输所花费的时间，即 10 KB @ 50  或 0.195 ms。==
+
+
+
+
+As we can see, R is less than 1 , and  is almost 50.
+==正如我们所见，R 小于 1 ，且  接近 50。==
+
+Back To RAID-0 Analysis, Again
+==再次回到 RAID-0 分析==
+
+Let's now evaluate the performance of striping.
+==现在让我们评估条带化的性能。==
+
+As we said above, it is generally good.
+==正如我们上面所说，通常很好。==
+
+From a latency perspective, for example, the latency of a single-block request should be just about identical to that of a single disk;
+==例如，从延迟的角度来看，单块请求的延迟应该与单个磁盘的延迟几乎相同；==
+
+after all, RAID-0 will simply redirect that request to one of its disks.
+==毕竟，RAID-0 只是将该请求重定向到其磁盘之一。==
+
+From the perspective of steady-state sequential throughput, we'd expect to get the full bandwidth of the system.
+==从稳态顺序吞吐量的角度来看，我们期望获得系统的全部带宽。==
+
+Thus, throughput equals N (the number of disks) multiplied by S (the sequential bandwidth of a single disk).
+==因此，吞吐量等于 N（磁盘数量）乘以 S（单个磁盘的顺序带宽）。==
+
+For a large number of random , we can again use all of the disks, and thus obtain .
+==对于大量的随机 I/O，我们可以再次使用所有磁盘，从而获得 。==
+
+As we will see below, these values are both the simplest to calculate and will serve as an upper bound in comparison with other RAID levels.
+==正如我们将在下面看到的，这些值既是最容易计算的，也将作为与其他 RAID 级别比较的上限。==
 
 38.5 RAID Level 1: Mirroring
-38.5 RAID 1 级：镜像
+==38.5 RAID 1 级：镜像==
+
+Our first RAID level beyond striping is known as RAID level 1, or mirroring.
+==除了条带化之外，我们的第一个 RAID 级别被称为 RAID 1 级，或镜像。==
+
+With a mirrored system, we simply make more than one copy of each block in the system;
+==对于镜像系统，我们只是简单地为系统中的每个块制作多个副本；==
+
+each copy should be placed on a separate disk, of course.
+==当然，每个副本应该放在单独的磁盘上。==
+
+By doing so, we can tolerate disk failures.
+==这样做，我们可以容忍磁盘故障。==
+
+In a typical mirrored system, we will assume that for each logical block, the RAID keeps two physical copies of it.
+==在一个典型的镜像系统中，我们将假设对于每个逻辑块，RAID 保留两个物理副本。==
+
+Here is an example:
+==这里有一个例子：==
+
+Figure 38.3: Simple RAID-1: Mirroring
+==图 38.3：简单 RAID-1：镜像==
+
+In the example, disk 0 and disk 1 have identical contents, and disk 2 and disk 3 do as well;
+==在这个例子中，磁盘 0 和磁盘 1 有相同的内容，磁盘 2 和磁盘 3 也是如此；==
+
+the data is striped across these mirror pairs.
+==数据在这些镜像对之间条带化。==
+
+In fact, you may have noticed that there are a number of different ways to place block copies across the disks.
+==事实上，你可能已经注意到有许多不同的方式在磁盘上放置块副本。==
+
+The arrangement above is a common one and is sometimes called RAID-10 (or RAID , stripe of mirrors) because it uses mirrored pairs (RAID-1) and then stripes (RAID-0) on top of them;
+==上面的排列是一种常见的方式，有时被称为 RAID-10（或 RAID ，镜像的条带），因为它使用镜像对（RAID-1），然后在它们之上进行条带化（RAID-0）；==
+
+another common arrangement is RAID-01 (or RAID , mirror of stripes), which contains two large striping (RAID-0) arrays, and then mirrors (RAID-1) on top of them.
+==另一种常见的排列是 RAID-01（或 RAID ，条带的镜像），它包含两个大的条带化（RAID-0）阵列，然后在它们之上进行镜像（RAID-1）。==
+
+For now, we will just talk about mirroring assuming the above layout.
+==目前，我们将假设上述布局来讨论镜像。==
+
+When reading a block from a mirrored array, the RAID has a choice: it can read either copy.
+==当从镜像阵列读取块时，RAID 有一个选择：它可以读取任意一个副本。==
+
+For example, if a read to logical block 5 is issued to the RAID, it is free to read it from either disk 2 or disk 3.
+==例如，如果向 RAID 发出一个读取逻辑块 5 的请求，它可以自由地从磁盘 2 或磁盘 3 读取它。==
+
+When writing a block, though, no such choice exists: the RAID must update both copies of the data, in order to preserve reliability.
+==然而，当写入一个块时，不存在这样的选择：RAID 必须更新数据的两个副本，以保持可靠性。==
+
+Do note, though, that these writes can take place in parallel;
+==请注意，这些写入可以并行进行；==
+
+for example, a write to logical block 5 could proceed to disks 2 and 3 at the same time.
+==例如，对逻辑块 5 的写入可以同时在磁盘 2 和 3 上进行。==
+
+RAID-1 Analysis
+==RAID-1 分析==
+
+Let us assess RAID-1.
+==让我们评估一下 RAID-1。==
+
+From a capacity standpoint, RAID-1 is expensive;
+==从容量的角度来看，RAID-1 是昂贵的；==
+
+with the mirroring level , we only obtain half of our peak useful capacity.
+==当镜像级别  时，我们只获得峰值有用容量的一半。==
+
+With N disks of B blocks, RAID-1 useful capacity is .
+==对于 N 个磁盘，每个磁盘有 B 个块，RAID-1 的有用容量是 。==
+
+From a reliability standpoint, RAID-1 does well.
+==从可靠性的角度来看，RAID-1 表现良好。==
+
+It can tolerate the failure of any one disk.
+==它可以容忍任何一个磁盘的故障。==
+
+You may also notice RAID-1 can actually do better than this, with a little luck.
+==你可能也注意到，运气好的话，RAID-1 实际上可以做得比这更好。==
+
+Imagine, in the figure above, that disk 0 and disk 2 both failed.
+==想象一下，在上图中，磁盘 0 和磁盘 2 都坏了。==
+
+In such a situation, there is no data loss!
+==在这种情况下，没有数据丢失！==
+
+More generally, a mirrored system (with mirroring level of 2) can tolerate 1 disk failure for certain, and up to  failures depending on which disks fail.
+==更一般地说，一个镜像系统（镜像级别为 2）可以确定地容忍 1 个磁盘故障，并且最多可以容忍  个故障，具体取决于哪些磁盘发生故障。==
+
+In practice, we generally don't like to leave things like this to chance;
+==在实践中，我们通常不喜欢把这种事情留给运气；==
+
+thus most people consider mirroring to be good for handling a single failure.
+==因此大多数人认为镜像适合处理单个故障。==
+
+Finally, we analyze performance.
+==最后，我们分析性能。==
+
+From the perspective of the latency of a single read request, we can see it is the same as the latency on a single disk;
+==从单个读取请求的延迟角度来看，我们可以看到它与单个磁盘的延迟相同；==
+
+all the RAID-1 does is direct the read to one of its copies.
+==RAID-1 所做的只是将读取指向其副本之一。==
+
+A write is a little different: it requires two physical writes to complete before it is done.
+==写入稍有不同：它需要完成两个物理写入才算完成。==
+
+These two writes happen in parallel, and thus the time will be roughly equivalent to the time of a single write;
+==这两个写入是并行发生的，因此时间将大致相当于单个写入的时间；==
+
+however, because the logical write must wait for both physical writes to complete, it suffers the worst-case seek and rotational delay of the two requests, and thus (on average) will be slightly higher than a write to a single disk.
+==然而，因为逻辑写入必须等待两个物理写入都完成，所以它会遭受两个请求中最坏情况的寻道和旋转延迟，因此（平均而言）会略高于对单个磁盘的写入。==
+
+ASIDE: THE RAID CONSISTENT-UPDATE PROBLEM
+==旁注：RAID 一致性更新问题==
+
+Before analyzing RAID-1, let us first discuss a problem that arises in any multi-disk RAID system, known as the consistent-update problem [DAA05].
+==在分析 RAID-1 之前，让我们首先讨论任何多磁盘 RAID 系统中都会出现的一个问题，即一致性更新问题 [DAA05]。==
+
+The problem occurs on a write to any RAID that has to update multiple disks during a single logical operation.
+==当对任何需要在单个逻辑操作期间更新多个磁盘的 RAID 进行写入时，就会出现此问题。==
+
+In this case, let us assume we are considering a mirrored disk array.
+==在这种情况下，让我们假设我们正在考虑一个镜像磁盘阵列。==
+
+Imagine the write is issued to the RAID, and then the RAID decides that it must be written to two disks, disk 0 and disk 1.
+==想象写入请求被发往 RAID，然后 RAID 决定必须将其写入两个磁盘，磁盘 0 和磁盘 1。==
+
+The RAID then issues the write to disk 0, but just before the RAID can issue the request to disk 1, a power loss (or system crash) occurs.
+==然后 RAID 向磁盘 0 发出写入，但在 RAID 向磁盘 1 发出请求之前，发生了断电（或系统崩溃）。==
+
+In this unfortunate case, let us assume that the request to disk 0 completed (but clearly the request to disk 1 did not, as it was never issued).
+==在这个不幸的情况下，让我们假设对磁盘 0 的请求已完成（但显然对磁盘 1 的请求没有完成，因为它从未发出）。==
+
+The result of this untimely power loss is that the two copies of the block are now inconsistent;
+==这种不合时宜的断电导致的结果是，该块的两个副本现在不一致了；==
+
+the copy on disk 0 is the new version, and the copy on disk 1 is the old.
+==磁盘 0 上的副本是新版本，而磁盘 1 上的副本是旧版本。==
+
+What we would like to happen is for the state of both disks to change atomically, i.e., either both should end up as the new version or neither.
+==我们要希望发生的是两个磁盘的状态原子性地改变，即要么都变成新版本，要么都不是。==
+
+The general way to solve this problem is to use a write-ahead log of some kind to first record what the RAID is about to do (i.e., update two disks with a certain piece of data) before doing it.
+==解决这个问题的一般方法是使用某种预写日志，在执行操作之前先记录 RAID 将要做什么（即，用特定数据更新两个磁盘）。==
+
+By taking this approach, we can ensure that in the presence of a crash, the right thing will happen;
+==通过采取这种方法，我们可以确保在发生崩溃时，会发生正确的事情；==
+
+by running a recovery procedure that replays all pending transactions to the RAID, we can ensure that no two mirrored copies (in the RAID-1 case) are out of sync.
+==通过运行一个重放所有挂起事务到 RAID 的恢复程序，我们可以确保没有两个镜像副本（在 RAID-1 案例中）是不同步的。==
+
+One last note: because logging to disk on every write is prohibitively expensive, most RAID hardware includes a small amount of non-volatile RAM (e.g., battery-backed) where it performs this type of logging.
+==最后一点：因为在每次写入时都记录到磁盘极其昂贵，大多数 RAID 硬件包含少量非易失性 RAM（例如，电池供电的），并在那里执行此类日志记录。==
+
+Thus, consistent update is provided without the high cost of logging to disk.
+==因此，在没有记录到磁盘的高昂成本的情况下提供了一致性更新。==
+
+To analyze steady-state throughput, let us start with the sequential workload.
+==为了分析稳态吞吐量，让我们从顺序工作负载开始。==
+
+When writing out to disk sequentially, each logical write must result in two physical writes;
+==当顺序写入磁盘时，每个逻辑写入必须导致两个物理写入；==
+
+for example, when we write logical block 0 (in the figure above), the RAID internally would write it to both disk 0 and disk 1.
+==例如，当我们写入逻辑块 0（在上图中）时，RAID 内部会将其写入磁盘 0 和磁盘 1。==
+
+Thus, we can conclude that the maximum bandwidth obtained during sequential writing to a mirrored array is , or half the peak bandwidth.
+==因此，我们可以得出结论，镜像阵列顺序写入期间获得的最大带宽是 ，即峰值带宽的一半。==
+
+Unfortunately, we obtain the exact same performance during a sequential read.
+==不幸的是，在顺序读取期间我们获得了完全相同的性能。==
+
+One might think that a sequential read could do better, because it only needs to read one copy of the data, not both.
+==人们可能认为顺序读取可以做得更好，因为它只需要读取数据的一个副本，而不是两个。==
+
+However, let's use an example to illustrate why this doesn't help much.
+==然而，让我们用一个例子来说明为什么这没有太大帮助。==
+
+Imagine we need to read blocks 0, 1, 2, 3, 4, 5, 6, and 7.
+==想象一下我们需要读取块 0、1、2、3、4、5、6 和 7。==
+
+Let's say we issue the read of 0 to disk 0, the read of 1 to disk 2, the read of 2 to disk 1, and the read of 3 to disk 3.
+==假设我们将 0 的读取发给磁盘 0，1 的读取发给磁盘 2，2 的读取发给磁盘 1，3 的读取发给磁盘 3。==
+
+We continue by issuing reads to 4, 5, 6, and 7 to disks 0, 2, 1, and 3, respectively.
+==我们继续将 4、5、6 和 7 的读取分别发给磁盘 0、2、1 和 3。==
+
+One might naively think that because we are utilizing all disks, we are achieving the full bandwidth of the array.
+==人们可能会天真地认为，因为我们在利用所有磁盘，所以我们实现了阵列的全部带宽。==
+
+To see that this is not (necessarily) the case, however, consider the requests a single disk receives (say disk 0).
+==然而，要明白情况（未必）如此，请考虑单个磁盘（比如说磁盘 0）收到的请求。==
+
+First, it gets a request for block 0; then, it gets a request for block 4 (skipping block 2).
+==首先，它收到块 0 的请求；然后，它收到块 4 的请求（跳过了块 2）。==
+
+In fact, each disk receives a request for every other block.
+==事实上，每个磁盘每隔一个块接收一个请求。==
+
+While it is rotating over the skipped block, it is not delivering useful bandwidth to the client.
+==当它在被跳过的块上旋转时，它并没有向客户端提供有用的带宽。==
+
+Thus, each disk will only deliver half its peak bandwidth.
+==因此，每个磁盘将只提供其峰值带宽的一半。==
+
+And thus, the sequential read will only obtain a bandwidth of .
+==因此，顺序读取将只获得  的带宽。==
+
+Random reads are the best case for a mirrored RAID.
+==随机读取是镜像 RAID 的最佳情况。==
+
+In this case, we can distribute the reads across all the disks, and thus obtain the full possible bandwidth.
+==在这种情况下，我们可以将读取分布到所有磁盘上，从而获得全部可能的带宽。==
+
+Thus, for random reads, RAID-1 delivers .
+==因此，对于随机读取，RAID-1 提供 。==
+
+Finally, random writes perform as you might expect: .
+==最后，随机写入的表现正如你所预期的那样：。==
+
+Each logical write must turn into two physical writes, and thus while all the disks will be in use, the client will only perceive this as half the available bandwidth.
+==每个逻辑写入必须变成两个物理写入，因此虽然所有磁盘都将被使用，但客户端只能感知到可用带宽的一半。==
+
+Even though a write to logical block x turns into two parallel writes to two different physical disks, the bandwidth of many small requests only achieves half of what we saw with striping.
+==即使对逻辑块 x 的写入变成了对两个不同物理磁盘的两个并行写入，许多小请求的带宽也只能达到我们在条带化中看到的一半。==
+
+As we will soon see, getting half the available bandwidth is actually pretty good!
+==正如我们很快就会看到的，获得可用带宽的一半实际上已经相当不错了！==
 
 38.6 RAID Level 4: Saving Space With Parity
-38.6 RAID 4 级：使用奇偶校验节省空间
+==38.6 RAID 4 级：利用奇偶校验节省空间==
+
+We now present a different method of adding redundancy to a disk array known as parity.
+==我们现在介绍一种不同的向磁盘阵列添加冗余的方法，称为奇偶校验。==
+
+Parity-based approaches attempt to use less capacity and thus overcome the huge space penalty paid by mirrored systems.
+==基于奇偶校验的方法试图使用更少的容量，从而克服镜像系统付出的巨大空间代价。==
+
+They do so at a cost, however: performance.
+==然而，这样做是有代价的：性能。==
+
+Figure 38.4: RAID-4 With Parity
+==图 38.4：具有奇偶校验的 RAID-4==
+
+Here is an example five-disk RAID-4 system (Figure 38.4).
+==这里有一个五磁盘 RAID-4 系统的例子（图 38.4）。==
+
+For each stripe of data, we have added a single parity block that stores the redundant information for that stripe of blocks.
+==对于每个数据条带，我们添加了一个奇偶校验块，用于存储该条带块的冗余信息。==
+
+For example, parity block P1 has redundant information that it calculated from blocks 4, 5, 6, and 7.
+==例如，奇偶校验块 P1 具有从块 4、5、6 和 7 计算得出的冗余信息。==
+
+To compute parity, we need to use a mathematical function that enables us to withstand the loss of any one block from our stripe.
+==为了计算奇偶校验，我们需要使用一个数学函数，使我们能够承受条带中任何一个块的丢失。==
+
+It turns out the simple function XOR does the trick quite nicely.
+==事实证明，简单的异或（XOR）函数就能很好地达到目的。==
+
+For a given set of bits, the XOR of all of those bits returns a 0 if there are an even number of 1's in the bits, and a 1 if there are an odd number of 1's.
+==对于给定的一组位，如果其中 1 的个数是偶数，则所有这些位的异或返回 0，如果是奇数，则返回 1。==
+
+For example:
+==例如：==
+
+In the first row (0,0,1,1), there are two 1's (C2, C3), and thus XOR of all of those values will be 0 (P);
+==在第一行 (0,0,1,1) 中，有两个 1 (C2, C3)，因此所有这些值的异或将是 0 (P)；==
+
+similarly, in the second row there is only one 1 (C1), and thus the XOR must be 1 (P).
+==同样，在第二行中只有一个 1 (C1)，因此异或必须是 1 (P)。==
+
+You can remember this in a simple way: that the number of 1s in any row, including the parity bit, must be an even (not odd) number;
+==你可以用一种简单的方式记住这一点：任何一行中 1 的数量，包括奇偶校验位，必须是偶数（不是奇数）；==
+
+that is the invariant that the RAID must maintain in order for parity to be correct.
+==这是 RAID 必须维护的不变性，以便奇偶校验是正确的。==
+
+From the example above, you might also be able to guess how parity information can be used to recover from a failure.
+==从上面的例子中，你也许能猜出奇偶校验信息如何用于从故障中恢复。==
+
+Imagine the column labeled C2 is lost.
+==想象一下标记为 C2 的列丢失了。==
+
+To figure out what values must have been in the column, we simply have to read in all the other values in that row (including the XOR'd parity bit) and reconstruct the right answer.
+==为了弄清楚该列中一定是什么值，我们只需读入该行中的所有其他值（包括异或的奇偶校验位）并重构正确的答案。==
+
+Specifically, assume the first row's value in column C2 is lost (it is a 1);
+==具体来说，假设第一行 C2 列的值丢失（它是 1）；==
+
+by reading the other values in that row (0 from C0, 0 from C1, 1 from C3, and 0 from the parity column P), we get the values 0, 0, 1, and 0.
+==通过读取该行中的其他值（来自 C0 的 0，来自 C1 的 0，来自 C3 的 1，以及来自奇偶校验列 P 的 0），我们得到值 0、0、1 和 0。==
+
+Because we know that XOR keeps an even number of 1's in each row, we know what the missing data must be: a 1.
+==因为我们知道异或保持每一行中 1 的数量为偶数，我们知道丢失的数据一定是什么：一个 1。==
+
+And that is how reconstruction works in a XOR-based parity scheme!
+==这就是基于异或的奇偶校验方案中重建的工作原理！==
+
+Note also how we compute the reconstructed value: we just XOR the data bits and the parity bits together, in the same way that we calculated the parity in the first place.
+==还要注意我们如何计算重构的值：我们只是将数据位和奇偶校验位异或在一起，就像我们最初计算奇偶校验一样。==
+
+Now you might be wondering: we are talking about XORing all of these bits, and yet from above we know that the RAID places 4KB (or larger) blocks on each disk;
+==现在你可能会想：我们在谈论异或所有这些位，但从上面我们知道 RAID 在每个磁盘上放置 4KB（或更大）的块；==
+
+how do we apply XOR to a bunch of blocks to compute the parity?
+==我们如何对一堆块应用异或来计算奇偶校验？==
+
+It turns out this is easy as well.
+==事实证明这也容易。==
+
+Simply perform a bitwise XOR across each bit of the data blocks;
+==只需对数据块的每一位执行按位异或；==
+
+put the result of each bitwise XOR into the corresponding bit slot in the parity block.
+==将每个按位异或的结果放入奇偶校验块中相应的位槽中。==
+
+As you can see from the figure, the parity is computed for each bit of each block and the result placed in the parity block.
+==正如图中所示，奇偶校验是为每个块的每一位计算的，结果放置在奇偶校验块中。==
+
+RAID-4 Analysis
+==RAID-4 分析==
+
+Let us now analyze RAID-4.
+==现在让我们分析 RAID-4。==
+
+From a capacity standpoint, RAID-4 uses 1 disk for parity information for every group of disks it is protecting.
+==从容量的角度来看，RAID-4 为它保护的每组磁盘使用 1 个磁盘用于奇偶校验信息。==
+
+Thus, our useful capacity for a RAID group is .
+==因此，我们的 RAID 组的有用容量是 。==
+
+Reliability is also quite easy to understand: RAID-4 tolerates 1 disk failure and no more.
+==可靠性也很容易理解：RAID-4 可以容忍 1 个磁盘故障，不能更多。==
+
+If more than one disk is lost, there is simply no way to reconstruct the lost data.
+==如果丢失超过一个磁盘，根本无法重构丢失的数据。==
+
+Figure 38.5: Full-stripe Writes In RAID-4
+==图 38.5：RAID-4 中的全条带写入==
+
+Finally, there is performance.
+==最后是性能。==
+
+This time, let us start by analyzing steady-state throughput.
+==这一次，让我们从分析稳态吞吐量开始。==
+
+Sequential read performance can utilize all of the disks except for the parity disk, and thus deliver a peak effective bandwidth of  (an easy case).
+==顺序读取性能可以利用除奇偶校验磁盘以外的所有磁盘，从而提供  的峰值有效带宽（这是一个简单的情况）。==
+
+To understand the performance of sequential writes, we must first understand how they are done.
+==要理解顺序写入的性能，我们必须首先了解它们是如何完成的。==
+
+When writing a big chunk of data to disk, RAID-4 can perform a simple optimization known as a full-stripe write.
+==当向磁盘写入一大块数据时，RAID-4 可以执行一种称为全条带写入的简单优化。==
+
+For example, imagine the case where the blocks 0, 1, 2, and 3 have been sent to the RAID as part of a write request (Figure 38.5).
+==例如，想象块 0、1、2 和 3 作为写入请求的一部分已发送到 RAID 的情况（图 38.5）。==
+
+In this case, the RAID can simply calculate the new value of P0 (by performing an XOR across the blocks 0, 1, 2, and 3) and then write all of the blocks (including the parity block) to the five disks above in parallel (highlighted in gray in the figure).
+==在这种情况下，RAID 可以简单地计算 P0 的新值（通过对块 0、1、2 和 3 执行异或），然后并行地将所有块（包括奇偶校验块）写入上面的五个磁盘（图中以灰色突出显示）。==
+
+Thus, full-stripe writes are the most efficient way for RAID-4 to write to disk.
+==因此，全条带写入是 RAID-4 写入磁盘的最有效方式。==
+
+Once we understand the full-stripe write, calculating the performance of sequential writes on RAID-4 is easy;
+==一旦我们理解了全条带写入，计算 RAID-4 上顺序写入的性能就很容易了；==
+
+the effective bandwidth is also .
+==有效带宽也是 。==
+
+Even though the parity disk is constantly in use during the operation, the client does not gain performance advantage from it.
+==即使奇偶校验磁盘在操作过程中一直被使用，客户端也不会从中获得性能优势。==
+
+Now let us analyze the performance of random reads.
+==现在让我们分析随机读取的性能。==
+
+As you can also see from the figure above, a set of 1-block random reads will be spread across the data disks of the system but not the parity disk.
+==正如你从上图中看到的那样，一组 1 块大小的随机读取将分布在系统的数据磁盘上，但不会分布在奇偶校验磁盘上。==
+
+Thus, the effective performance is: .
+==因此，有效性能是：。==
+
+Random writes, which we have saved for last, present the most interesting case for RAID-4.
+==我们留到最后的随机写入，展示了 RAID-4 最有趣的情况。==
+
+Imagine we wish to overwrite block 1 in the example above.
+==想象一下我们希望覆盖上面例子中的块 1。==
+
+We could just go ahead and overwrite it, but that would leave us with a problem: the parity block P0 would no longer accurately reflect the correct parity value of the stripe;
+==我们可以直接覆盖它，但这会给我们留下一个问题：奇偶校验块 P0 将不再准确反映条带的正确奇偶校验值；==
+
+in this example, P0 must also be updated.
+==在这个例子中，P0 也必须更新。==
+
+How can we update it both correctly and efficiently?
+==我们如何既正确又有效地更新它？==
+
+It turns out there are two methods.
+==事实证明有两种方法。==
+
+The first, known as additive parity, requires us to do the following.
+==第一种称为加法奇偶校验，需要我们要执行以下操作。==
+
+To compute the value of the new parity block, read in all of the other data blocks in the stripe in parallel (in the example, blocks 0, 2, and 3) and XOR those with the new block (1).
+==为了计算新奇偶校验块的值，并行读入条带中的所有其他数据块（在示例中为块 0、2 和 3），并将它们与新块 (1) 进行异或。==
+
+The result is your new parity block.
+==结果就是你的新奇偶校验块。==
+
+To complete the write, you can then write the new data and new parity to their respective disks, also in parallel.
+==要完成写入，你可以随后将新数据和新奇偶校验并行写入各自的磁盘。==
+
+The problem with this technique is that it scales with the number of disks, and thus in larger RAIDs requires a high number of reads to compute parity.
+==这种技术的问题在于它随磁盘数量扩展，因此在较大的 RAID 中需要大量的读取来计算奇偶校验。==
+
+Thus, the subtractive parity method.
+==因此，有了减法奇偶校验方法。==
+
+For example, imagine this string of bits (4 data bits, one parity):
+==例如，想象这串位（4 个数据位，1 个奇偶校验位）：==
+
+C0 C1 C2 C3 P
+0 0 1 1 0
+
+XOR(0,0,1,1) = 0
+XOR(0,0,1,1) = 0
+
+Let's imagine that we wish to overwrite bit C2 with a new value which we will call .
+==让我们想象一下，我们希望用一个新值覆盖位 C2，我们称之为 。==
+
+The subtractive method works in three steps.
+==减法分三步进行。==
+
+First, we read in the old data at C2 () and the old parity ().
+==首先，我们读入 C2 处的旧数据（）和旧奇偶校验（）。==
+
+Then, we compare the old data and the new data;
+==然后，我们比较旧数据和新数据；==
+
+if they are the same (e.g., ), then we know the parity bit will also remain the same (i.e., ).
+==如果它们相同（例如，），那么我们知道奇偶校验位也将保持不变（即 ）。==
+
+If, however, they are different, then we must flip the old parity bit to the opposite of its current state, that is, if ,  will be set to 0;
+==然而，如果它们不同，那么我们必须将旧奇偶校验位翻转为其当前状态的反面，也就是说，如果 ， 将被设置为 0；==
+
+if ,  will be set to 1.
+==如果 ， 将被设置为 1。==
+
+We can express this whole mess neatly with XOR:
+==我们可以用异或整洁地表达这一团乱麻：==
+
+
+
+
+Because we are dealing with blocks, not bits, we perform this calculation over all the bits in the block (e.g., 4096 bytes in each block multiplied by 8 bits per byte).
+==因为我们处理的是块，而不是位，所以我们对块中的所有位执行此计算（例如，每个块 4096 字节乘以每字节 8 位）。==
+
+Thus, in most cases, the new block will be different than the old block and thus the new parity block will too.
+==因此，在大多数情况下，新块将不同于旧块，因此新奇偶校验块也将不同。==
+
+You should now be able to figure out when we would use the additive parity calculation and when we would use the subtractive method.
+==你现在应该能够弄清楚我们要何时使用加法奇偶校验计算，何时使用减法。==
+
+Think about how many disks would need to be in the system so that the additive method performs fewer I/Os than the subtractive method;
+==想一想系统中需要有多少个磁盘，才能使加法方法执行的 I/O 少于减法方法；==
+
+what is the cross-over point?
+==交叉点是多少？==
+
+For this performance analysis, let us assume we are using the subtractive method.
+==对于这个性能分析，让我们假设我们使用的是减法。==
+
+Thus, for each write, the RAID has to perform 4 physical  (two reads and two writes).
+==因此，对于每次写入，RAID 必须执行 4 次物理 I/O（两次读取和两次写入）。==
+
+Now imagine there are lots of writes submitted to the RAID; how many can RAID-4 perform in parallel?
+==现在想象有大量写入提交给 RAID；RAID-4 可以并行执行多少个？==
+
+To understand, let us again look at the RAID-4 layout (Figure 38.6).
+==为了理解，让我们再次看看 RAID-4 的布局（图 38.6）。==
+
+Figure 38.6: Example: Writes To 4, 13, And Respective Parity Blocks
+==图 38.6：示例：写入 4、13 和各自的奇偶校验块==
+
+Now imagine there were 2 small writes submitted to the RAID-4 at about the same time, to blocks 4 and 13.
+==现在想象大约在同一时间向 RAID-4 提交了 2 个小写入，分别写入块 4 和 13。==
+
+The data for those disks is on disks 0 and 1, and thus the read and write to data could happen in parallel, which is good.
+==这些磁盘的数据位于磁盘 0 和 1 上，因此数据的读写可以并行发生，这很好。==
+
+The problem that arises is with the parity disk; both the requests have to read the related parity blocks for 4 and 13, parity blocks 1 and 3.
+==出现的问题在于奇偶校验磁盘；两个请求都必须读取 4 和 13 的相关奇偶校验块，即奇偶校验块 1 和 3。==
+
+Hopefully, the issue is now clear: the parity disk is a bottleneck under this type of workload;
+==希望现在问题已经很清楚了：在这种类型的工作负载下，奇偶校验磁盘是一个瓶颈；==
+
+we sometimes thus call this the small-write problem for parity-based RAIDs.
+==因此我们有时将此称为基于奇偶校验的 RAID 的小写入问题。==
+
+Thus, even though the data disks could be accessed in parallel, the parity disk prevents any parallelism from materializing;
+==因此，即使数据磁盘可以并行访问，奇偶校验磁盘也阻碍了任何并行性的实现；==
+
+all writes to the system will be serialized because of the parity disk.
+==由于奇偶校验磁盘，所有对系统的写入都将被序列化。==
+
+Because the parity disk has to perform two  (one read, one write) per logical  we can compute the performance of small random writes in RAID-4 by computing the parity disk's performance on those two , and thus we achieve  MB/s.
+==因为奇偶校验磁盘必须为每个逻辑 I/O 执行两个 I/O（一次读取，一次写入），我们可以通过计算奇偶校验磁盘在这两个 I/O 上的性能来计算 RAID-4 中小随机写入的性能，因此我们达到了  MB/s。==
+
+RAID-4 throughput under random small writes is terrible;
+==随机小写入下的 RAID-4 吞吐量很糟糕；==
+
+it does not improve as you add disks to the system.
+==随着向系统添加磁盘，它并没有改善。==
+
+We conclude by analyzing I/O latency in RAID-4.
+==最后我们分析 RAID-4 中的 I/O 延迟。==
+
+As you now know, a single read (assuming no failure) is just mapped to a single disk, and thus its latency is equivalent to the latency of a single disk request.
+==正如你现在所知，单个读取（假设没有故障）只是映射到单个磁盘，因此其延迟相当于单个磁盘请求的延迟。==
+
+The latency of a single write requires two reads and then two writes;
+==单个写入的延迟需要两次读取，然后是两次写入；==
+
+the reads can happen in parallel, as can the writes, and thus total latency is about twice that of a single disk (with some differences because we have to wait for both reads to complete and thus get the worst-case positioning time, but then the updates don't incur seek cost and thus may be a better-than-average positioning cost).
+==读取可以并行发生，写入也可以，因此总延迟大约是单个磁盘的两倍（有一些差异，因为我们必须等待两个读取都完成，从而得到最坏情况的定位时间，但随后的更新不会产生寻道成本，因此可能具有优于平均水平的定位成本）。==
 
 38.7 RAID Level 5: Rotating Parity
-38.7 RAID 5 级：旋转奇偶校验
+==38.7 RAID 5 级：旋转奇偶校验==
+
+To address the small-write problem (at least, partially), Patterson, Gibson, and Katz introduced RAID-5.
+==为了解决小写入问题（至少是部分解决），Patterson、Gibson 和 Katz 推出了 RAID-5。==
+
+RAID-5 works almost identically to RAID-4, except that it rotates the parity block across drives (Figure 38.7).
+==RAID-5 的工作原理与 RAID-4 几乎相同，除了它会在驱动器之间旋转奇偶校验块（图 38.7）。==
+
+Figure 38.7: RAID-5 With Rotated Parity
+==图 38.7：具有旋转奇偶校验的 RAID-5==
+
+As you can see, the parity block for each stripe is now rotated across the disks, in order to remove the parity-disk bottleneck for RAID-4.
+==正如你所看到的，每个条带的奇偶校验块现在在磁盘之间旋转，以消除 RAID-4 的奇偶校验磁盘瓶颈。==
+
+RAID-5 Analysis
+==RAID-5 分析==
+
+Much of the analysis for RAID-5 is identical to RAID-4.
+==RAID-5 的大部分分析与 RAID-4 相同。==
+
+For example, the effective capacity and failure tolerance of the two levels are identical.
+==例如，这两个级别的有效容量和故障容忍度是相同的。==
+
+So are sequential read and write performance.
+==顺序读写性能也是如此。==
+
+The latency of a single request (whether a read or a write) is also the same as RAID-4.
+==单个请求的延迟（无论是读还是写）也与 RAID-4 相同。==
+
+Random read performance is a little better, because we can now utilize all disks.
+==随机读取性能稍微好一点，因为我们现在可以利用所有磁盘。==
+
+Finally, random write performance improves noticeably over RAID-4, as it allows for parallelism across requests.
+==最后，随机写入性能比 RAID-4 显着提高，因为它允许跨请求并行。==
+
+Imagine a write to block 1 and a write to block 10;
+==想象一下对块 1 的写入和对块 10 的写入；==
+
+this will turn into requests to disk 1 and disk 4 (for block 1 and its parity) and requests to disk 0 and disk 2 (for block 10 and its parity).
+==这将变成对磁盘 1 和磁盘 4 的请求（针对块 1 及其奇偶校验），以及对磁盘 0 和磁盘 2 的请求（针对块 10 及其奇偶校验）。==
+
+Thus, they can proceed in parallel.
+==因此，它们可以并行进行。==
+
+Figure 38.8: RAID Capacity, Reliability, and Performance
+==图 38.8：RAID 容量、可靠性和性能==
+
+In fact, we can generally assume that given a large number of random requests, we will be able to keep all the disks about evenly busy.
+==事实上，我们通常可以假设，给定大量的随机请求，我们将能够使所有磁盘大致均匀地忙碌。==
+
+If that is the case, then our total bandwidth for small writes will be .
+==如果是这种情况，那么我们小写入的总带宽将是 。==
+
+The factor of four loss is due to the fact that each RAID-5 write still generates 4 total  operations, which is simply the cost of using parity-based RAID.
+==四倍的损失是由于每个 RAID-5 写入仍然产生 4 个总 I/O 操作，这仅仅是使用基于奇偶校验的 RAID 的成本。==
+
+Because RAID-5 is basically identical to RAID-4 except in the few cases where it is better, it has almost completely replaced RAID-4 in the marketplace.
+==因为 RAID-5 除了在少数情况下更好之外，基本上与 RAID-4 相同，所以它在市场上几乎完全取代了 RAID-4。==
+
+The only place where it has not is in systems that know they will never perform anything other than a large write, thus avoiding the small-write problem altogether [HLM94];
+==唯一的例外是那些知道除了大写入之外永远不会执行其他操作的系统，从而完全避免了小写入问题 [HLM94]；==
+
+in those cases, RAID-4 is sometimes used as it is slightly simpler to build.
+==在这些情况下，有时会使用 RAID-4，因为它的构建稍微简单一些。==
 
 38.8 RAID Comparison: A Summary
-38.8 RAID 比较：总结
+==38.8 RAID 比较：总结==
 
-38.9 Other Interesting RAID Issues
-38.9 其他有趣的 RAID 问题
+We now summarize our simplified comparison of RAID levels in Figure 38.8.
+==我们现在在图 38.8 中总结我们对 RAID 级别的简化比较。==
 
-38.10 Summary
-38.10 总结
+Note that we have omitted a number of details to simplify our analysis.
+==请注意，为了简化分析，我们省略了许多细节。==
 
-**39 Interlude: Files and Directories**
-39 插曲：文件和目录
+For example, when writing in a mirrored system, the average seek time is a little higher than when writing to just a single disk, because the seek time is the max of two seeks (one on each disk).
+==例如，在镜像系统中写入时，平均寻道时间比仅写入单个磁盘时稍高，因为寻道时间是两次寻道（每个磁盘一次）的最大值。==
 
-39.1 Files And Directories
-39.1 文件和目录
+Thus, random write performance to two disks will generally be a little less than random write performance of a single disk.
+==因此，对两个磁盘的随机写入性能通常会略低于单个磁盘的随机写入性能。==
 
-39.2 The File System Interface
-39.2 文件系统接口
+Also, when updating the parity disk in RAID-4/5, the first read of the old parity will likely cause a full seek and rotation, but the second write of the parity will only result in rotation.
+==此外，在 RAID-4/5 中更新奇偶校验磁盘时，第一次读取旧奇偶校验可能会导致完全的寻道和旋转，但第二次写入奇偶校验将只会导致旋转。==
 
-39.3 Creating Files
-39.3 创建文件
+Finally, sequential I/O to mirrored RAIDs pay a 2x performance penalty as compared to other approaches.
+==最后，与其他方法相比，镜像 RAID 的顺序 I/O 付出了 2 倍的性能代价。==
 
-39.4 Reading And Writing Files
-39.4 读写文件
+The  penalty assumes a naive read/write pattern for mirroring;
+== 的代价假设了镜像的朴素读写模式；==
 
-39.5 Reading And Writing, But Not Sequentially
-39.5 读写，但非顺序
+a more sophisticated approach that issued large  requests to differing parts of each mirror could potentially achieve full bandwidth.
+==一种更复杂的方法，即向每个镜像的不同部分发出大型 I/O 请求，可能实现全带宽。==
 
-39.6 Shared File Table Entries: fork() And dup()
-39.6 共享文件表项：fork() 和 dup()
-
-39.7 Writing Immediately With fsync()
-39.7 使用 fsync() 立即写入
-
-39.8 Renaming Files
-39.8 重命名文件
-
-39.9 Getting Information About Files
-39.9 获取文件信息
-
-39.10 Removing Files
-39.10 删除文件
-
-39.11 Making Directories
-39.11 创建目录
-
-39.12 Reading Directories
-39.12 读取目录
-
-39.13 Deleting Directories
-39.13 删除目录
-
-39.14 Hard Links
-39.14 硬链接
-
-39.15 Symbolic Links
-39.15 符号链接
-
-39.16 Permission Bits And Access Control Lists
-39.16 权限位和访问控制列表
-
-39.17 Making And Mounting A File System
-39.17 创建和挂载文件系统
-
-39.18 Summary
-39.18 总结
-
-**40 File System Implementation**
-40 文件系统实现
-
-40.1 The Way To Think
-40.1 思考方式
-
-40.2 Overall Organization
-40.2 整体组织结构
-
-40.3 File Organization: The Inode
-40.3 文件组织：索引节点 (Inode)
-
-40.4 Directory Organization
-40.4 目录组织
-
-40.5 Free Space Management
-40.5 空闲空间管理
-
-40.6 Access Paths: Reading and Writing
-40.6 访问路径：读和写
-
-40.7 Caching and Buffering
-40.7 缓存和缓冲
-
-40.8 Summary
-40.8 总结
-
-**41 Locality and The Fast File System**
-41 局部性和快速文件系统 (FFS)
-
-41.1 The Problem: Poor Performance
-41.1 问题：性能不佳
-
-41.2 FFS: Disk Awareness Is The Solution
-41.2 FFS：磁盘感知是解决方案
-
-41.3 Organizing Structure: The Cylinder Group
-41.3 组织结构：柱面组
-
-41.4 Policies: How To Allocate Files and Directories
-41.4 策略：如何分配文件和目录
-
-41.5 Measuring File Locality
-41.5 测量文件局部性
-
-41.6 The Large-File Exception
-41.6 大文件例外
-
-41.7 A Few Other Things About FFS
-41.7 关于 FFS 的其他几件事
-
-41.8 Summary
-41.8 总结
-
-**42 Crash Consistency: FSCK and Journaling**
-42 崩溃一致性：FSCK 和日志记录
-
-42.1 A Detailed Example
-42.1 一个详细的例子
-
-42.2 Solution #1: The File System Checker
-42.2 解决方案 #1：文件系统检查器
-
-42.3 Solution #2: Journaling (or Write-Ahead Logging)
-42.3 解决方案 #2：日志记录（或预写日志）
-
-42.4 Solution #3: Other Approaches
-42.4 解决方案 #3：其他方法
-
-42.5 Summary
-42.5 总结
-
-**43 Log-structured File Systems**
-43 日志结构文件系统 (LFS)
-
-43.1 Writing To Disk Sequentially
-43.1 顺序写入磁盘
-
-43.2 Writing Sequentially And Effectively
-43.2 有效地顺序写入
-
-43.3 How Much To Buffer?
-43.3 缓冲多少？
-
-43.4 Problem: Finding Inodes
-43.4 问题：查找索引节点
-
-43.5 Solution Through Indirection: The Inode Map
-43.5 通过间接解决：索引节点映射 (Inode Map)
-
-43.6 Completing The Solution: The Checkpoint Region
-43.6 完善解决方案：检查点区域 (Checkpoint Region)
-
-43.7 Reading A File From Disk: A Recap
-43.7 从磁盘读取文件：回顾
-
-43.8 What About Directories?
-43.8 目录怎么办？
-
-43.9 A New Problem: Garbage Collection
-43.9 一个新问题：垃圾回收
-
-43.10 Determining Block Liveness
-43.10 确定块的活跃度
-
-43.11 A Policy Question: Which Blocks To Clean, And When?
-43.11 一个策略问题：清理哪些块，以及何时清理？
-
-43.12 Crash Recovery And The Log
-43.12 崩溃恢复和日志
-
-43.13 Summary
-43.13 总结
-
-**44 Flash-based SSDs**
-44 基于闪存的 SSD
-
-44.1 Storing a Single Bit
-44.1 存储单个位
-
-44.2 From Bits to Banks/Planes
-44.2 从位到 Bank/Plane
-
-44.3 Basic Flash Operations
-44.3 基本闪存操作
-
-44.4 Flash Performance And Reliability
-44.4 闪存性能和可靠性
-
-44.5 From Raw Flash to Flash-Based SSDs
-44.5 从原始闪存到基于闪存的 SSD
-
-44.6 FTL Organization: A Bad Approach
-44.6 FTL 组织结构：一种糟糕的方法
-
-44.7 A Log-Structured FTL
-44.7 日志结构 FTL
-
-44.8 Garbage Collection
-44.8 垃圾回收
-
-44.9 Mapping Table Size
-44.9 映射表大小
-
-44.10 Wear Leveling
-44.10 磨损均衡
-
-44.11 SSD Performance And Cost
-44.11 SSD 性能和成本
-
-44.12 Summary
-44.12 总结
-
-**45 Data Integrity and Protection**
-45 数据完整性和保护
-
-45.1 Disk Failure Modes
-45.1 磁盘故障模式
-
-45.2 Handling Latent Sector Errors
-45.2 处理潜在扇区错误
-
-45.3 Detecting Corruption: The Checksum
-45.3 检测损坏：校验和
-
-45.4 Using Checksums
-45.4 使用校验和
-
-45.5 A New Problem: Misdirected Writes
-45.5 一个新问题：误导写入 (Misdirected Writes)
-
-45.6 One Last Problem: Lost Writes
-45.6 最后一个问题：丢失写入 (Lost Writes)
-
-45.7 Scrubbing
-45.7 清洗 (Scrubbing)
-
-45.8 Overheads Of Checksumming
-45.8 校验和的开销
-
-45.9 Summary
-45.9 总结
-
-46 Summary Dialogue on Persistence
-46 关于持久性的总结对话
-
-47 A Dialogue on Distribution
-47 关于分布式的对话
-
-48 Distributed Systems
-48 分布式系统
-
-48.1 Communication Basics
-48.1 通信基础
-
-48.2 Unreliable Communication Layers
-48.2 不可靠通信层
-
-48.3 Reliable Communication Layers
-48.3 可靠通信层
-
-48.4 Communication Abstractions
-48.4 通信抽象
-
-48.5 Remote Procedure Call (RPC)
-48.5 远程过程调用 (RPC)
-
-48.6 Summary
-48.6 总结
-
-**49 Sun's Network File System (NFS)**
-49 Sun 的网络文件系统 (NFS)
-
-49.1 A Basic Distributed File System
-49.1 一个基本的分布式文件系统
-
-49.2 On To NFS
-49.2 进入 NFS
-
-49.3 Focus: Simple And Fast Server Crash Recovery
-49.3 重点：简单快速的服务器崩溃恢复
-
-49.4 Key To Fast Crash Recovery: Statelessness
-49.4 快速崩溃恢复的关键：无状态性
-
-49.5 The NFSv2 Protocol
-49.5 NFSv2 协议
-
-49.6 From Protocol To Distributed File System
-49.6 从协议到分布式文件系统
-
-49.7 Handling Server Failure With Idempotent Operations
-49.7 使用幂等操作处理服务器故障
-
-49.8 Improving Performance: Client-side Caching
-49.8 提高性能：客户端缓存
-
-49.9 The Cache Consistency Problem
-49.9 缓存一致性问题
-
-49.10 Assessing NFS Cache Consistency
-49.10 评估 NFS 缓存一致性
-
-49.11 Implications On Server-Side Write Buffering
-49.11 对服务器端写入缓冲的影响
-
-49.12 Summary
-49.12 总结
-
-**50 The Andrew File System (AFS)**
-50 Andrew 文件系统 (AFS)
-
-50.1 AFS Version 1
-50.1 AFS 版本 1
-
-50.2 Problems with Version 1
-50.2 版本 1 的问题
-
-50.3 Improving the Protocol
-50.3 改进协议
-
-50.4 AFS Version 2
-50.4 AFS 版本 2
-
-50.5 Cache Consistency
-50.5 缓存一致性
-
-50.6 Crash Recovery
-50.6 崩溃恢复
-
-50.7 Scale And Performance Of AFSv2
-50.7 AFSv2 的规模和性能
-
-50.8 AFS: Other Improvements
-50.8 AFS：其他改进
-
-50.9 Summary
-50.9 总结
-
-51 Summary Dialogue on Distribution
-51 关于分布式的总结对话
-
-General Index
-总索引
-
-Asides
-旁白
-
-Tips
-提示
-
-Cruces
-关键问题
-
-**1 A Dialogue on the Book**
-1 关于本书的对话
-
-Professor: Welcome to this book!
-教授：欢迎阅读本书！
-
-It's called **Operating Systems in Three Easy Pieces**, and I am here to teach you the things you need to know about operating systems.
-它的名字叫《**操作系统导论**》（**Operating Systems in Three Easy Pieces**），我在这里是为了教你关于操作系统需要了解的知识。
-
-I am called "Professor"; who are you?
-我被称为“教授”；你是谁？
-
-Student: Hi Professor!
-学生：嗨，教授！
-
-I am called "Student", as you might have guessed.
-正如你可能猜到的那样，我被称为“学生”。
-
-And I am here and ready to learn!
-我已经准备好学习了！
-
-Professor: Sounds good. Any questions?
-教授：听起来不错。有什么问题吗？
-
-Student: Sure! Why is it called "Three Easy Pieces"?
-学生：当然！为什么叫“三个简单的部分”？
-
-Professor: That's an easy one.
-教授：这很容易回答。
-
-Well, you see, there are these great lectures on Physics by Richard Feynman...
-嗯，你看，理查德·费曼有一些关于物理学的精彩讲座……
-
-Student: Oh! The guy who wrote "Surely You're Joking, Mr. Feynman", right?
-学生：哦！就是写《别闹了，费曼先生》的那个人，对吧？
-
-Great book!
-很棒的书！
-
-Is this going to be hilarious like that book was?
-这本书会像那本书一样幽默吗？
-
-Professor: Um... well, no.
-教授：呃……好吧，不是。
-
-That book was great, and I'm glad you've read it.
-那本书很棒，我很高兴你读过。
-
-Hopefully this book is more like his notes on Physics.
-希望这本书更像他的物理学讲义。
-
-Some of the basics were summed up in a book called "Six Easy Pieces".
-一些基础知识被总结在一本名为《物理之美：费曼物理学讲义入门选》（Six Easy Pieces）的书中。
-
-He was talking about Physics; we're going to do Three Easy Pieces on the fine topic of Operating Systems.
-他谈论的是物理学；我们将针对操作系统这个精妙的主题进行“三个简单的部分”的讲解。
-
-This is appropriate, as Operating Systems are about half as hard as Physics.
-这很合适，因为操作系统的难度大约是物理学的一半。
-
-Student: Well, I liked physics, so that is probably good.
-学生：嗯，我喜欢物理，所以这大概是件好事。
-
-What are those pieces?
-那些部分是什么？
-
-Professor: They are the three key ideas we're going to learn about: virtualization, concurrency, and persistence.
-教授：它们是我们将要学习的三个关键思想：虚拟化、并发和持久性。
-
-In learning about these ideas, we'll learn all about how an operating system works, including how it decides what program to run next on a CPU, how it handles memory overload in a virtual memory system, how virtual machine monitors work, how to manage information on disks, and even a little about how to build a distributed system that works when parts have failed.
-在学习这些思想的过程中，我们将全面了解操作系统是如何工作的，包括它如何决定接下来在 CPU 上运行哪个程序，如何在虚拟内存系统中处理内存过载，虚拟机监视器如何工作，如何管理磁盘上的信息，甚至还会涉及一点关于如何构建在部分组件失效时仍能工作的分布式系统。
-
-That sort of stuff.
-诸如此类的事情。
-
-Student: I have no idea what you're talking about, really.
-学生：说实话，我完全不知道你在说什么。
-
-Professor: Good! That means you are in the right class.
-教授：很好！这意味着你来对课堂了。
-
-Student: I have another question: what's the best way to learn this stuff?
-学生：我还有一个问题：学习这些东西的最好方法是什么？
-
-Professor: Excellent query!
-教授：极好的问题！
-
-Well, each person needs to figure this out on their own, of course, but here is what I would do: go to class, to hear the professor introduce the material.
-当然，每个人都需要自己找到适合的方法，但我会这样做：去上课，听教授介绍材料。
-
-Then, at the end of every week, read these notes, to help the ideas sink into your head a bit better.
-然后，在每周结束时，阅读这些笔记，以帮助这些思想更好地深入你的脑海。
-
-Of course, some time later (hint: before the exam!), read the notes again to firm up your knowledge.
-当然，过段时间（提示：在考试前！），再次阅读笔记以巩固你的知识。
-
-Of course, your professor will no doubt assign some homeworks and projects, so you should do those; in particular, doing projects where you write real code to solve real problems is the best way to put the ideas within these notes into action.
-当然，你的教授毫无疑问会布置一些家庭作业和项目，所以你应该完成它们；特别是，做那些编写真实代码来解决实际问题的项目，是将这些笔记中的思想付诸实践的最佳方式。
-
-As Confucius said...
-正如孔子所说……
-
-Student: Oh, I know!
-学生：哦，我知道！
-
-'I hear and I forget. I see and I remember. I do and I understand.'
-“不闻不若闻之，闻之不若见之，见之不若知之，知之不若行之。”（此处原文引用英文俗语，对应中文典故为荀子《儒效》篇，非孔子）
-
-Or something like that.
-或者类似的说法。
-
-Professor: (surprised) How did you know what I was going to say?!
-教授：（惊讶）你怎么知道我要说什么？！
-
-Student: It seemed to follow.
-学生：这似乎是顺理成章的。
-
-Also, I am a big fan of Confucius, and an even bigger fan of Xunzi, who actually is a better source for this quote.
-而且，我是孔子的超级粉丝，更是荀子的超级粉丝，他实际上才是这句话更好的出处。
-
-Professor: (stunned) Well, I think we are going to get along just fine!
-教授：（惊呆了）好吧，我想我们会相处得很好！
-
-Just fine indeed.
-确实会很好。
-
-Student: Professor - just one more question, if I may.
-学生：教授——如果可以的话，还有一个问题。
-
-What are these dialogues for?
-这些对话是用来做什么的？
-
-I mean, isn't this just supposed to be a book?
-我的意思是，这不应该只是一本书吗？
-
-Why not present the material directly?
-为什么不直接展示材料呢？
-
-Professor: Ah, good question, good question!
-教授：啊，好问题，好问题！
-
-Well, I think it is sometimes useful to pull yourself outside of a narrative and think a bit; these dialogues are those times.
-嗯，我认为有时把自己从叙述中抽离出来思考一下是有用的；这些对话就是这样的时刻。
-
-So you and I are going to work together to make sense of all of these pretty complex ideas.
-所以你和我将一起努力理清所有这些相当复杂的思想。
-
-Are you up for it?
-你准备好了吗？
-
-Student: So we have to think?
-学生：所以我们必须思考？
-
-Well, I'm up for that.
-好吧，我准备好了。
-
-I mean, what else do I have to do anyhow?
-我的意思是，反正我还能做什么呢？
-
-It's not like I have much of a life outside of this book.
-我就像在这本书之外没什么生活一样。
-
-Professor: Me neither, sadly.
-教授：遗憾的是，我也一样。
-
-So let's get to work!
-所以让我们开始工作吧！
-
-**2 Introduction to Operating Systems**
-2 操作系统介绍
-
-If you are taking an undergraduate operating systems course, you should already have some idea of what a computer program does when it runs.
-如果你正在修读本科操作系统课程，你应该已经对计算机程序运行时做什么有了一些概念。
-
-If not, this book (and the corresponding course) is going to be difficult so you should probably stop reading this book, or run to the nearest bookstore and quickly consume the necessary background material before continuing (both Patt & Patel and Bryant & O'Hallaron are pretty great books).
-如果没有，这本书（以及相应的课程）将会很难，所以你可能应该停止阅读这本书，或者跑到最近的书店，快速消化必要的背景材料再继续（Patt & Patel 以及 Bryant & O'Hallaron 的书都很棒）。
-
-So what happens when a program runs?
-那么当程序运行时会发生什么呢？
-
-Well, a running program does one very simple thing: it executes instructions.
-嗯，一个正在运行的程序做一件非常简单的事情：它执行指令。
-
-Many millions (and these days, even billions) of times every second, the processor fetches an instruction from memory, decodes it (i.e., figures out which instruction this is), and executes it (i.e., it does the thing that it is supposed to do, like add two numbers together, access memory, check a condition, jump to a function, and so forth).
-每秒数百万次（现在甚至数十亿次），处理器从内存中取出一鸣指令，解码它（即弄清楚这是哪条指令），并执行它（即做它应该做的事情，比如将两个数字相加、访问内存、检查条件、跳转到函数等等）。
-
-After it is done with this instruction, the processor moves on to the next instruction, and so on, and so on, until the program finally completes.
-在完成这条指令后，处理器继续执行下一条指令，依此类推，直到程序最终完成。
-
-Thus, we have just described the basics of the Von Neumann model of computing.
-因此，我们要刚刚描述了冯·诺依曼计算模型的基础知识。
-
-Sounds simple, right?
-听起来很简单，对吧？
-
-But in this class, we will be learning that while a program runs, a lot of other wild things are going on with the primary goal of making the system easy to use.
-但是在这门课上，我们将了解到，当程序运行时，还会发生很多其他疯狂的事情，其主要目标是使系统易于使用。
-
-There is a body of software, in fact, that is responsible for making it easy to run programs (even allowing you to seemingly run many at the same time), allowing programs to share memory, enabling programs to interact with devices, and other fun stuff like that.
-事实上，有一套软件负责使运行程序变得容易（甚至允许你看起来同时运行许多程序），允许程序共享内存，使程序能够与设备交互，以及其他类似有趣的事情。
-
-That body of software is called the **operating system** (OS), as it is in charge of making sure the system operates correctly and efficiently in an easy-to-use manner.
-这套软件被称为**操作系统** (OS)，因为它负责确保系统以易于使用的方式正确高效地运行。
-
-**The Crux of the Problem: How to Virtualize Resources**
-**问题的关键：如何虚拟化资源**
-
-One central question we will answer in this book is quite simple: how does the operating system virtualize resources?
-我们将在本书中回答的一个核心问题非常简单：操作系统如何虚拟化资源？
-
-This is the crux of our problem.
-这是我们问题的关键。
-
-Why the OS does this is not the main question, as the answer should be obvious: it makes the system easier to use.
-操作系统为什么这样做不是主要问题，因为答案应该是显而易见的：它使系统更易于使用。
-
-Thus, we focus on the **how**: what mechanisms and policies are implemented by the OS to attain virtualization?
-因此，我们要关注**如何做**：操作系统实施了哪些机制和策略来实现虚拟化？
-
-How does the OS do so efficiently?
-操作系统如何高效地做到这一点？
-
-What hardware support is needed?
-需要什么硬件支持？
-
-We will use the "crux of the problem", in shaded boxes such as this one, as a way to call out specific problems we are trying to solve in building an operating system.
-我们将使用“问题的关键”（如本框所示的阴影框）来指出我们在构建操作系统时试图解决的具体问题。
-
-Thus, within a note on a particular topic, you may find one or more cruces (yes, this is the proper plural) which highlight the problem.
-因此，在关于特定主题的笔记中，你可能会发现一个或多个 cruces（是的，这是 crux 的正确复数形式），它们突出了问题。
-
-The details within the chapter, of course, present the solution, or at least the basic parameters of a solution.
-当然，章节中的细节会提供解决方案，或者至少是解决方案的基本参数。
-
-The primary way the OS does this is through a general technique that we call **virtualization**.
-操作系统执行此操作的主要方式是通过一种我们要称为**虚拟化**的通用技术。
-
-That is, the OS takes a physical resource (such as the processor, or memory, or a disk) and transforms it into a more general, powerful, and easy-to-use virtual form of itself.
-也就是说，操作系统获取物理资源（如处理器、内存或磁盘）并将其转换为更通用、更强大且更易于使用的虚拟形式。
-
-Thus, we sometimes refer to the operating system as a **virtual machine**.
-因此，我们要有时将操作系统称为**虚拟机**。
-
-Of course, in order to allow users to tell the OS what to do and thus make use of the features of the virtual machine (such as running a program, or allocating memory, or accessing a file), the OS also provides some interfaces (APIs) that you can call.
-当然，为了允许用户告诉操作系统要做什么，从而利用虚拟机的特性（如运行程序、分配内存或访问文件），操作系统还提供了一些你可以调用的接口 (API)。
-
-A typical OS, in fact, exports a few hundred **system calls** that are available to applications.
-事实上，典型的操作系统会向应用程序导出几百个**系统调用**。
-
-Because the OS provides these calls to run programs, access memory and devices, and other related actions, we also sometimes say that the OS provides a **standard library** to applications.
-因为操作系统提供这些调用来运行程序、访问内存和设备以及其他相关操作，我们要有时也说操作系统为应用程序提供了一个**标准库**。
-
-Finally, because virtualization allows many programs to run (thus sharing the CPU), and many programs to concurrently access their own instructions and data (thus sharing memory), and many programs to access devices (thus sharing disks and so forth), the OS is sometimes known as a **resource manager**.
-最后，因为虚拟化允许许多程序运行（从而共享 CPU），许多程序并发访问它们自己的指令和数据（从而共享内存），以及许多程序访问设备（从而共享磁盘等），操作系统有时被称为**资源管理器**。
-
-Each of the CPU, memory, and disk is a **resource** of the system; it is thus the operating system's role to manage those resources, doing so efficiently or fairly or indeed with many other possible goals in mind.
-CPU、内存和磁盘中的每一个都是系统的**资源**；因此，操作系统的角色是管理这些资源，以高效、公平或实际上许多其他可能的目标来做这件事。
-
-To understand the role of the OS a little bit better, let's take a look at some examples.
-为了更好地理解操作系统的角色，让我们看一些例子。
-
-**2.1 Virtualizing The CPU**
-2.1 CPU 虚拟化
-
-Figure 2.1 depicts our first program.
-图 2.1 描绘了我们的第一个程序。
-
-It doesn't do much.
-它没做什么事。
-
-In fact, all it does is call `Spin()`, a function that repeatedly checks the time and returns once it has run for a second.
-事实上，它所做的只是调用 `Spin()`，这是一个反复检查时间并在运行一秒钟后返回的函数。
-
-Then, it prints out the string that the user passed in on the command line, and repeats, forever.
-然后，它打印出用户在命令行上传入的字符串，并永远重复。
-
-Let's say we save this file as `cpu.c` and decide to compile and run it on a system with a single processor (or CPU as we will sometimes call it).
-假设我们将此文件保存为 `cpu.c`，并决定在具有单个处理器（或者我们有时称之为 CPU）的系统上编译并运行它。
-
-Here is what we will see:
-这是我们将看到的：
-
-`prompt> gcc -o cpu cpu.c -Wall`
-`prompt> ./cpu "A"`
-A
-A
-A
-A
-^C
-`prompt>`
-
-Not too interesting of a run - the system begins running the program, which repeatedly checks the time until a second has elapsed.
-运行起来不太有趣——系统开始运行程序，程序反复检查时间直到一秒钟过去。
-
-Once a second has passed, the code prints the input string passed in by the user (in this example, the letter "A"), and continues.
-一旦一秒钟过去，代码就会打印用户传入的输入字符串（在本例中为字母 "A"），然后继续。
-
-Note the program will run forever; by pressing "Control-c" (which on UNIX-based systems will terminate the program running in the foreground) we can halt the program.
-注意程序将永远运行；通过按 "Control-c"（在基于 UNIX 的系统上将终止在前台运行的程序），我们可以停止程序。
-
-Now, let's do the same thing, but this time, let's run many different instances of this same program.
-现在，让我们做同样的事情，但这次，我们要运行同一个程序的许多不同实例。
-
-Figure 2.2 shows the results of this slightly more complicated example.
-图 2.2 显示了这个稍微复杂一点的例子的结果。
-
-`prompt> ./cpu A & ./cpu B & ./cpu C & ./cpu D &`
-`[1] 7353`
-`[2] 7354`
-`[3] 7355`
-`[4] 7356`
-A
-B
-D
-C
-A
-B
-D
-C
-A
-...
-
-Well, now things are getting a little more interesting.
-嗯，现在事情变得更有趣了一点。
-
-Even though we have only one processor, somehow all four of these programs seem to be running at the same time!
-即使我们只有一个处理器，但这四个程序似乎都在同时运行！
-
-How does this magic happen?
-这种魔法是如何发生的？
-
-It turns out that the operating system, with some help from the hardware, is in charge of this illusion, i.e., the illusion that the system has a very large number of virtual CPUs.
-原来是操作系统在硬件的帮助下负责这种错觉，即系统拥有大量虚拟 CPU 的错觉。
-
-Turning a single CPU (or a small set of them) into a seemingly infinite number of CPUs and thus allowing many programs to seemingly run at once is what we call **virtualizing the CPU**, the focus of the first major part of this book.
-将单个 CPU（或一小组 CPU）变成看似无限数量的 CPU，从而允许许多程序看似同时运行，这就是我们要称为**虚拟化 CPU** 的技术，这也是本书第一主要部分的重点。
-
-Of course, to run programs, and stop them, and otherwise tell the OS which programs to run, there need to be some interfaces (APIs) that you can use to communicate your desires to the OS.
-当然，为了运行程序、停止程序以及以其他方式告诉操作系统运行哪些程序，需要有一些接口 (API) 供你用来与操作系统交流你的意愿。
-
-We'll talk about these APIs throughout this book; indeed, they are the major way in which most users interact with operating systems.
-我们将在整本书中讨论这些 API；实际上，它们是大多数用户与操作系统交互的主要方式。
-
-You might also notice that the ability to run multiple programs at once raises all sorts of new questions.
-你可能还会注意到，同时运行多个程序的能力引发了各种新问题。
-
-For example, if two programs want to run at a particular time, which should run?
-例如，如果两个程序想在特定时间运行，应该运行哪一个？
-
-This question is answered by a **policy** of the OS; policies are used in many different places within an OS to answer these types of questions, and thus we will study them as we learn about the basic mechanisms that operating systems implement (such as the ability to run multiple programs at once).
-这个问题由操作系统的**策略**回答；策略在操作系统内的许多不同地方用于回答此类问题，因此我们将在学习操作系统实施的基本机制（如同时运行多个程序的能力）时研究它们。
-
-Hence the role of the OS as a resource manager.
-因此，这也是操作系统作为资源管理器的角色。
-
-**2.2 Virtualizing Memory**
-2.2 虚拟化内存
-
-Now let's consider memory.
-现在让我们考虑内存。
-
-The model of physical memory presented by modern machines is very simple.
-现代机器呈现的物理内存模型非常简单。
-
-Memory is just an array of bytes; to read memory, one must specify an address to be able to access the data stored there; to write (or update) memory, one must also specify the data to be written to the given address.
-内存只是一个字节数组；要读取内存，必须指定一个地址才能访问存储在那里的数据；要写入（或更新）内存，还必须指定要写入给定地址的数据。
-
-Memory is accessed all the time when a program is running.
-程序运行时一直都在访问内存。
-
-A program keeps all of its data structures in memory, and accesses them through various instructions, like loads and stores or other explicit instructions that access memory in doing their work.
-程序将其所有数据结构保存在内存中，并通过各种指令访问它们，例如加载和存储或其他在工作时访问内存的显式指令。
-
-Don't forget that each instruction of the program is in memory too; thus memory is accessed on each instruction fetch.
-别忘了程序的每一条指令也在内存中；因此，每次获取指令时都会访问内存。
-
-Let's take a look at a program (in Figure 2.3) that allocates some memory by calling `malloc()`.
-让我们看一个程序（在图 2.3 中），它通过调用 `malloc()` 分配一些内存。
-
-The output of this program can be found here:
-该程序的输出如下：
-
-`prompt> ./mem`
-`(2134) address pointed to by p: 0x200000`
-`(2134) p: 1`
-`(2134) p: 2`
-`(2134) p: 3`
-`(2134) p: 4`
-`(2134) p: 5`
-^C
-
-The program does a couple of things.
-程序做了几件事。
-
-First, it allocates some memory (line a1).
-首先，它分配一些内存（a1 行）。
-
-Then, it prints out the address of the memory (a2), and then puts the number zero into the first slot of the newly allocated memory (a3).
-然后，它打印出内存的地址 (a2)，并将数字零放入新分配内存的第一个槽中 (a3)。
-
-Finally, it loops, delaying for a second and incrementing the value stored at the address held in p.
-最后，它循环，延迟一秒钟并增加存储在 p 中保存的地址处的值。
-
-With every print statement, it also prints out what is called the process identifier (the PID) of the running program.
-对于每个打印语句，它还会打印出正在运行的程序的进程标识符 (PID)。
-
-This PID is unique per running process.
-每个运行进程的 PID 都是唯一的。
-
-Again, this first result is not too interesting.
-同样，这第一个结果并不是太有趣。
-
-The newly allocated memory is at address 0x200000.
-新分配的内存位于地址 0x200000。
-
-As the program runs, it slowly updates the value and prints out the result.
-随着程序的运行，它会缓慢更新该值并打印出结果。
-
-Now, we again run multiple instances of this same program to see what happens (Figure 2.4).
-现在，我们要再次运行同一个程序的多个实例来看看会发生什么（图 2.4）。
-
-`prompt> ./mem & ./mem &`
-`[1] 24113`
-`[2] 24114`
-`(24113) address pointed to by p: 0x200000`
-`(24114) address pointed to by p: 0x200000`
-`(24113) p: 1`
-`(24114) p: 1`
-`(24114) p: 2`
-`(24113) p: 2`
-...
-
-We see from the example that each running program has allocated memory at the same address (0x200000), and yet each seems to be updating the value at 0x200000 independently!
-我们要从示例中看到，每个运行的程序都在相同的地址 (0x200000) 分配了内存，但每个程序似乎都在独立地更新 0x200000 处的值！
-
-It is as if each running program has its own private memory, instead of sharing the same physical memory with other running programs.
-这就好像每个运行的程序都有自己的私有内存，而不是与其他运行的程序共享相同的物理内存。
-
-Indeed, that is exactly what is happening here as the OS is **virtualizing memory**.
-事实上，这正是这里发生的事情，因为操作系统正在**虚拟化内存**。
-
-Each process accesses its own private **virtual address space** (sometimes just called its **address space**), which the OS somehow maps onto the physical memory of the machine.
-每个进程访问其自己的私有**虚拟地址空间**（有时简称为**地址空间**），操作系统以某种方式将其映射到机器的物理内存上。
-
-A memory reference within one running program does not affect the address space of other processes (or the OS itself); as far as the running program is concerned, it has physical memory all to itself.
-一个正在运行的程序中的内存引用不会影响其他进程（或操作系统本身）的地址空间；就正在运行的程序而言，它完全拥有物理内存。
-
-The reality, however, is that physical memory is a shared resource, managed by the operating system.
-然而，现实情况是物理内存是由操作系统管理的共享资源。
-
-Exactly how all of this is accomplished is also the subject of the first part of this book, on the topic of virtualization.
-所有这一切究竟是如何完成的也是本书第一部分的主题，即关于虚拟化的主题。
-
-**2.3 Concurrency**
-2.3 并发
-
-Another main theme of this book is **concurrency**.
-本书的另一个主要主题是**并发**。
-
-We use this conceptual term to refer to a host of problems that arise, and must be addressed, when working on many things at once (i.e., concurrently) in the same program.
-我们要使用这个概念性术语来指代在同一个程序中同时（即并发）处理许多事情时出现且必须解决的一系列问题。
-
-The problems of concurrency arose first within the operating system itself; as you can see in the examples above on virtualization, the OS is juggling many things at once, first running one process, then another, and so forth.
-并发问题首先出现在操作系统本身内部；正如你在上面关于虚拟化的示例中看到的那样，操作系统同时处理许多事情，先运行一个进程，然后运行另一个进程，依此类推。
-
-As it turns out, doing so leads to some deep and interesting problems.
-事实证明，这样做会导致一些深刻而有趣的问题。
-
-Unfortunately, the problems of concurrency are no longer limited just to the OS itself.
-不幸的是，并发问题不再仅限于操作系统本身。
-
-Indeed, modern multi-threaded programs exhibit the same problems.
-事实上，现代多线程程序也表现出同样的问题。
-
-Let us demonstrate with an example of a multi-threaded program (Figure 2.5).
-让我们用一个多线程程序的例子来演示（图 2.5）。
-
-Although you might not understand this example fully at the moment (and we'll learn a lot more about it in later chapters, in the section of the book on concurrency), the basic idea is simple.
-虽然你现在可能不完全理解这个例子（我们要将在后面的章节中，在本书关于并发的部分学到更多），但基本思想很简单。
-
-The main program creates two **threads** using `Pthread_create()`.
-主程序使用 `Pthread_create()` 创建两个**线程**。
-
-You can think of a thread as a function running within the same memory space as other functions, with more than one of them active at a time.
-你可以将线程视为在与其他函数相同的内存空间中运行的函数，并且一次有多个线程处于活动状态。
-
-In this example, each thread starts running in a routine called `worker()`, in which it simply increments a counter in a loop for `loops` number of times.
-在此示例中，每个线程都开始在一个名为 `worker()` 的例程中运行，在该例程中，它只是在一个循环中将计数器递增 `loops` 次。
-
-Below is a transcript of what happens when we run this program with the input value for the variable `loops` set to 1000.
-下面是当我们将变量 `loops` 的输入值设置为 1000 时运行此程序发生的情况的记录。
-
-The value of `loops` determines how many times each of the two workers will increment the shared counter in a loop.
-`loops` 的值决定了两个工作线程各自将在循环中递增共享计数器多少次。
-
-When the program is run with the value of `loops` set to 1000, what do you expect the final value of counter to be?
-当程序在 `loops` 值设置为 1000 的情况下运行时，你预计计数器的最终值是多少？
-
-`prompt> gcc -o threads threads.c -Wall -pthread`
-`prompt> ./threads 1000`
-`Initial value: 0`
-`Final value : 2000`
-
-As you probably guessed, when the two threads are finished, the final value of the counter is 2000, as each thread incremented the counter 1000 times.
-正如你可能猜到的那样，当两个线程完成时，计数器的最终值为 2000，因为每个线程都将计数器递增了 1000 次。
-
-Indeed, when the input value of `loops` is set to N, we would expect the final output of the program to be 2N.
-实际上，当 `loops` 的输入值设置为 N 时，我们要期望程序的最终输出为 2N。
-
-But life is not so simple, as it turns out.
-但事实证明，生活并非如此简单。
-
-Let's run the same program, but with higher values for `loops`, and see what happens:
-让我们运行相同的程序，但使用更大的 `loops` 值，看看会发生什么：
-
-`prompt> ./threads 100000`
-`Initial value: 0`
-`Final value : 143012`
-`prompt> ./threads 100000`
-`Initial value: 0`
-`Final value : 137298`
-// huh??
-// what the??
-
-In this run, when we gave an input value of 100,000, instead of getting a final value of 200,000, we instead first get 143,012.
-在这次运行中，当我们给出 100,000 的输入值时，我要没有得到 200,000 的最终值，而是首先得到了 143,012。
-
-Then, when we run the program a second time, we not only again get the wrong value, but also a different value than the last time.
-然后，当我们第二次运行该程序时，我们不仅再次得到了错误的值，而且还得到了与上次不同的值。
-
-In fact, if you run the program over and over with high values of `loops`, you may find that sometimes you even get the right answer!
-事实上，如果你用很大的 `loops` 值反复运行该程序，你可能会发现有时你甚至会得到正确的答案！
-
-So why is this happening?
-那么为什么会发生这种情况呢？
-
-As it turns out, the reason for these odd and unusual outcomes relate to how instructions are executed, which is one at a time.
-事实证明，这些奇怪而不寻常的结果的原因与指令的执行方式有关，即一次执行一条指令。
-
-Unfortunately, a key part of the program above, where the shared counter is incremented, takes three instructions: one to load the value of the counter from memory into a register, one to increment it, and one to store it back into memory.
-不幸的是，上面程序的关键部分（共享计数器递增的地方）需要三条指令：一条将计数器的值从内存加载到寄存器中，一条将其递增，另一条将其存回内存。
-
-Because these three instructions do not execute **atomically** (all at once), strange things can happen.
-因为这三条指令不是**原子地**（一次性全部）执行的，所以可能会发生奇怪的事情。
-
-**The Crux of the Problem: How to Build Correct Concurrent Programs**
-**问题的关键：如何构建正确的并发程序**
-
-When there are many concurrently executing threads within the same memory space, how can we build a correctly working program?
-当同一内存空间内有许多并发执行的线程时，我们如何构建一个正确工作的程序？
-
-What primitives are needed from the OS?
-需要操作系统提供什么原语？
-
-What mechanisms should be provided by the hardware?
-硬件应该提供什么机制？
-
-How can we use them to solve the problems of concurrency?
-我们如何使用它们来解决并发问题？
-
-It is this problem of concurrency that we will address in great detail in the second part of this book.
-我们将在本书的第二部分详细讨论这个并发问题。
-
-**2.4 Persistence**
-2.4 持久性
-
-The third major theme of the course is **persistence**.
-本课程的第三个主要主题是**持久性**。
-
-In system memory, data can be easily lost, as devices such as DRAM store values in a volatile manner; when power goes away or the system crashes, any data in memory is lost.
-在系统内存中，数据很容易丢失，因为像 DRAM 这样的设备以易失的方式存储值；当断电或系统崩溃时，内存中的任何数据都会丢失。
-
-Thus, we need hardware and software to be able to store data **persistently**; such storage is thus critical to any system as users care a great deal about their data.
-因此，我们需要硬件和软件能够**持久地**存储数据；这种存储因此对任何系统都至关重要，因为用户非常关心他们的数据。
-
-The hardware comes in the form of some kind of input/output or I/O device; in modern systems, a hard drive is a common repository for long-lived information, although solid-state drives (SSDs) are making headway in this arena as well.
-硬件以某种输入/输出或 I/O 设备的形式出现；在现代系统中，硬盘驱动器是长期信息的常见存储库，尽管固态驱动器 (SSD) 也在该领域取得进展。
-
-The software in the operating system that usually manages the disk is called the **file system**; it is thus responsible for storing any files the user creates in a reliable and efficient manner on the disks of the system.
-通常管理磁盘的操作系统软件称为**文件系统**；因此，它负责以可靠和高效的方式将用户创建的任何文件存储在系统的磁盘上。
-
-Unlike the abstractions provided by the OS for the CPU and memory, the OS does not create a private, virtualized disk for each application.
-与操作系统为 CPU 和内存提供的抽象不同，操作系统不会为每个应用程序创建一个私有的虚拟化磁盘。
-
-Rather, it is assumed that often times, users will want to share information that is in files.
-相反，人们假设用户通常希望共享文件中的信息。
-
-For example, when writing a C program, you might first use an editor (e.g., Emacs) to create and edit the C file (`emacs -nw main.c`).
-例如，在编写 C 程序时，你可能首先使用编辑器（如 Emacs）创建和编辑 C 文件 (`emacs -nw main.c`)。
-
-Once done, you might use the compiler to turn the source code into an executable (e.g., `gcc -o main main.c`).
-完成后，你可能会使用编译器将源代码转换为可执行文件（例如 `gcc -o main main.c`）。
-
-When you're finished, you might run the new executable (e.g., `./main`).
-完成后，你可能会运行新的可执行文件（例如 `./main`）。
-
-Thus, you can see how files are shared across different processes.
-因此，你可以看到文件是如何在不同进程之间共享的。
-
-First, Emacs creates a file that serves as input to the compiler; the compiler uses that input file to create a new executable file (in many steps - take a compiler course for details); finally, the new executable is then run.
-首先，Emacs 创建一个文件作为编译器的输入；编译器使用该输入文件创建一个新的可执行文件（分许多步骤——详情请参加编译器课程）；最后，运行新的可执行文件。
-
-And thus a new program is born!
-就这样，一个新程序诞生了！
-
-To understand this better, let's look at some code.
-为了更好地理解这一点，让我们看一些代码。
-
-Figure 2.6 presents code to create a file (`/tmp/file`) that contains the string "hello world".
-图 2.6 展示了创建一个包含字符串 "hello world" 的文件 (`/tmp/file`) 的代码。
-
-To accomplish this task, the program makes three calls into the operating system.
-为了完成此任务，程序向操作系统发出了三个调用。
-
-The first, a call to `open()`, opens the file and creates it; the second, `write()`, writes some data to the file; the third, `close()`, simply closes the file thus indicating the program won't be writing any more data to it.
-第一个调用 `open()` 打开并创建文件；第二个调用 `write()` 将一些数据写入文件；第三个调用 `close()` 只是关闭文件，从而表明程序不会再向其写入任何数据。
-
-These system calls are routed to the part of the operating system called the file system, which then handles the requests and returns some kind of error code to the user.
-这些系统调用被路由到操作系统中称为文件系统的部分，然后由文件系统处理请求并将某种错误代码返回给用户。
-
-You might be wondering what the OS does in order to actually write to disk.
-你可能想知道操作系统为了实际写入磁盘做了什么。
-
-We would show you but you'd have to promise to close your eyes first; it is that unpleasant.
-我们会给你看，但你得先保证闭上眼睛；那场面很不愉快。
-
-The file system has to do a fair bit of work: first figuring out where on disk this new data will reside, and then keeping track of it in various structures the file system maintains.
-文件系统必须做相当多的工作：首先弄清楚这个新数据将驻留在磁盘上的什么位置，然后在文件系统维护的各种结构中跟踪它。
-
-Doing so requires issuing I/O requests to the underlying storage device, to either read existing structures or update (write) them.
-这样做需要向底层存储设备发出 I/O 请求，以读取现有结构或更新（写入）它们。
-
-As anyone who has written a device driver knows, getting a device to do something on your behalf is an intricate and detailed process.
-任何写过设备驱动程序的人都知道，让设备代表你做某事是一个复杂而详细的过程。
-
-It requires a deep knowledge of the low-level device interface and its exact semantics.
-它需要对低级设备接口及其确切语义有深入的了解。
-
-Fortunately, the OS provides a standard and simple way to access devices through its system calls.
-幸运的是，操作系统提供了一种通过其系统调用访问设备的标准且简单的方法。
-
-Thus, the OS is sometimes seen as a standard library.
-因此，操作系统有时被视为标准库。
-
-Of course, there are many more details in how devices are accessed, and how file systems manage data persistently atop said devices.
-当然，关于如何访问设备以及文件系统如何在所述设备之上持久地管理数据，还有更多细节。
-
-For performance reasons, most file systems first delay such writes for a while, hoping to batch them into larger groups.
-出于性能原因，大多数文件系统首先将此类写入延迟一段时间，希望能将它们分批处理成更大的组。
-
-To handle the problems of system crashes during writes, most file systems incorporate some kind of intricate write protocol, such as **journaling** or **copy-on-write**, carefully ordering writes to disk to ensure that if a failure occurs during the write sequence, the system can recover to reasonable state afterwards.
-为了处理写入期间系统崩溃的问题，大多数文件系统都采用了某种复杂的写入协议，例如**日志记录**或**写时复制**，仔细排序对磁盘的写入，以确如果在写入序列期间发生故障，系统之后可以恢复到合理的状态。
-
-**The Crux of the Problem: How to Store Data Persistently**
-**问题的关键：如何持久地存储数据**
-
-The file system is the part of the OS in charge of managing persistent data.
-文件系统是操作系统中负责管理持久数据的部分。
-
-What techniques are needed to do so correctly?
-需要什么技术才能正确地做到这一点？
-
-What mechanisms and policies are required to do so with high performance?
-需要什么机制和策略才能以高性能做到这一点？
-
-How is reliability achieved, in the face of failures in hardware and software?
-面对硬件和软件故障，如何实现可靠性？
-
-To make different common operations efficient, file systems employ many different data structures and access methods, from simple lists to complex b-trees.
-为了使不同的常见操作高效，文件系统采用了许多不同的数据结构和访问方法，从简单的列表到复杂的 B 树。
-
-If all of this doesn't make sense yet, good!
-如果所有这些还没有意义，很好！
-
-We'll be talking about all of this quite a bit more in the third part of this book on persistence, where we'll discuss devices and I/O in general, and then disks, RAIDs, and file systems in great detail.
-我们要将在本书关于持久性的第三部分更多地讨论所有这些，我们将讨论一般的设备和 I/O，然后详细讨论磁盘、RAID 和文件系统。
-
-**2.5 Design Goals**
-2.5 设计目标
-
-So now you have some idea of what an OS actually does: it takes physical resources, such as a CPU, memory, or disk, and virtualizes them.
-现在你已经对操作系统实际做什么有了一些概念：它获取物理资源，如 CPU、内存或磁盘，并将它们虚拟化。
-
-It handles tough and tricky issues related to concurrency.
-它处理与并发相关的棘手问题。
-
-And it stores files persistently, thus making them safe over the long-term.
-它持久地存储文件，从而使它们在长期内安全。
-
-Given that we want to build such a system, we want to have some goals in mind to help focus our design and implementation and make trade-offs as necessary; finding the right set of trade-offs is a key to building systems.
-鉴于我们想要构建这样一个系统，我们希望心中有一些目标，以帮助我们专注于设计和实现，并在必要时进行权衡；找到正确的权衡组合是构建系统的关键。
-
-One of the most basic goals is to build up some **abstractions** in order to make the system convenient and easy to use.
-最基本的目标之一是建立一些**抽象**，以使系统方便易用。
-
-Abstractions are fundamental to everything we do in computer science.
-抽象是我们计算机科学中所做一切的基础。
-
-Abstraction makes it possible to write a large program by dividing it into small and understandable pieces, to write such a program in a high-level language like C without thinking about assembly, to write code in assembly without thinking about logic gates, and to build a processor out of gates without thinking too much about transistors.
-抽象使得编写大型程序成为可能，方法是将其划分为易于理解的小块；使得用 C 等高级语言编写此类程序成为可能，而无需考虑汇编；使得用汇编编写代码成为可能，而无需考虑逻辑门；使得用门构建处理器成为可能，而无需过多考虑晶体管。
-
-Abstraction is so fundamental that sometimes we forget its importance, but we won't here; thus, in each section, we'll discuss some of the major abstractions that have developed over time, giving you a way to think about pieces of the OS.
-抽象是如此基础，以至于有时我们会忘记它的重要性，但在这里我们不会忘记；因此，在每一节中，我们要讨论一些随着时间推移而发展起来的主要抽象，为你提供思考操作系统各个部分的方法。
-
-One goal in designing and implementing an operating system is to provide **high performance**; another way to say this is our goal is to **minimize the overheads** of the OS.
-设计和实现操作系统的一个目标是提供**高性能**；换句话说，我们的目标是**最小化操作系统的开销**。
-
-Virtualization and making the system easy to use are well worth it, but not at any cost; thus, we must strive to provide virtualization and other OS features without excessive overheads.
-虚拟化和使系统易于使用是非常值得的，但不是不计代价的；因此，我们要努力提供虚拟化和其他操作系统特性，而不会产生过多的开销。
-
-These overheads arise in a number of forms: extra time (more instructions) and extra space (in memory or on disk).
-这些开销以多种形式出现：额外的时间（更多的指令）和额外的空间（在内存或磁盘上）。
-
-We'll seek solutions that minimize one or the other or both, if possible.
-如果在可能的情况下，我们要寻求最小化其中之一或两者的解决方案。
-
-Perfection, however, is not always attainable, something we will learn to notice and (where appropriate) tolerate.
-然而，完美并非总能达到，我们要将学会注意到这一点，并在适当的时候容忍它。
-
-Another goal will be to provide **protection** between applications, as well as between the OS and applications.
-另一个目标是在应用程序之间以及操作系统和应用程序之间提供**保护**。
-
-Because we wish to allow many programs to run at the same time, we want to make sure that the malicious or accidental bad behavior of one does not harm others; we certainly don't want an application to be able to harm the OS itself (as that would affect all programs running on the system).
-因为我们希望允许许多程序同时运行，所以我们要确保一个程序的恶意或意外不良行为不会伤害其他程序；我们当然不希望应用程序能够伤害操作系统本身（因为那会影响系统上运行的所有程序）。
-
-Protection is at the heart of one of the main principles underlying an operating system, which is that of **isolation**; isolating processes from one another is the key to protection and thus underlies much of what an OS must do.
-保护是操作系统主要原则之一的核心，即**隔离**；将进程彼此隔离是保护的关键，因此也是操作系统必须做的大部分工作的基础。
-
-The operating system must also run non-stop; when it fails, all applications running on the system fail as well.
-操作系统还必须不间断地运行；当它出现故障时，系统上运行的所有应用程序也会失败。
-
-Because of this dependence, operating systems often strive to provide a high degree of **reliability**.
-由于这种依赖性，操作系统通常努力提供高度的**可靠性**。
-
-As operating systems grow evermore complex (sometimes containing millions of lines of code), building a reliable operating system is quite a challenge - and indeed, much of the on-going research in the field (including some of our own work) focuses on this exact problem.
-随着操作系统变得越来越复杂（有时包含数百万行代码），构建可靠的操作系统是一项相当大的挑战——事实上，该领域正在进行的许多研究（包括我们要自己的一些工作）都集中在这个确切的问题上。
-
-Other goals make sense: **energy-efficiency** is important in our increasingly green world; **security** (an extension of protection, really) against malicious applications is critical, especially in these highly-networked times; **mobility** is increasingly important as OSes are run on smaller and smaller devices.
-其他目标也是有意义的：在我们日益绿色的世界中，**能源效率**很重要；针对恶意应用程序的**安全性**（实际上是保护的延伸）至关重要，特别是在这个高度网络化的时代；随着操作系统在越来越小的设备上运行，**移动性**越来越重要。
-
-Depending on how the system is used, the OS will have different goals and thus likely be implemented in at least slightly different ways.
-根据系统的使用方式，操作系统将有不同的目标，因此可能会以至少略有不同的方式实现。
-
-However, as we will see, many of the principles we will present on how to build an OS are useful on a range of different devices.
-然而，正如我们将看到的，我们将介绍的关于如何构建操作系统的许多原则在一系列不同的设备上都是有用的。
-
-**2.6 Some History**
-2.6 一些历史
-
-Before closing this introduction, let us present a brief history of how operating systems developed.
-在结束本介绍之前，让我们简要介绍一下操作系统是如何发展的。
-
-Like any system built by humans, good ideas accumulated in operating systems over time, as engineers learned what was important in their design.
-像任何人类构建的系统一样，随着工程师们了解到设计中什么是重要的，好点子在操作系统中随时间积累。
-
-Here, we discuss a few major developments.
-在这里，我们要讨论几个主要的发展。
-
-For a richer treatment, see Brinch Hansen's excellent history of operating systems.
-要获得更丰富的内容，请参阅 Brinch Hansen 优秀的操作系统历史。
-
-**Early Operating Systems: Just Libraries**
-**早期操作系统：仅仅是库**
-
-In the beginning, the operating system didn't do too much.
-一开始，操作系统并没有做太多事情。
-
-Basically, it was just a set of libraries of commonly-used functions; for example, instead of having each programmer of the system write low-level I/O handling code, the "OS" would provide such APIs, and thus make life easier for the developer.
-基本上，它只是一组常用函数的库；例如，与其让系统的每个程序员编写低级 I/O 处理代码，“操作系统”会提供此类 API，从而使开发人员的生活更轻松。
-
-Usually, on these old mainframe systems, one program ran at a time, as controlled by a human operator.
-通常，在这些旧的大型机系统上，一次运行一个程序，由人工操作员控制。
-
-Much of what you think a modern OS would do (e.g., deciding what order to run jobs in) was performed by this operator.
-你认为现代操作系统会做的大部分工作（例如，决定以什么顺序运行作业）都是由这位操作员完成的。
-
-If you were a smart developer, you would be nice to this operator, so that they might move your job to the front of the queue.
-如果你是一个聪明的开发人员，你会对这位操作员很好，这样他们可能会把你的作业移到队列的前面。
-
-This mode of computing was known as **batch** processing, as a number of jobs were set up and then run in a "batch" by the operator.
-这种计算模式被称为**批处理**，因为许多作业被设置好，然后由操作员“批量”运行。
-
-Computers, as of that point, were not used in an interactive manner, because of cost: it was simply too expensive to let a user sit in front of the computer and use it, as most of the time it would just sit idle then, costing the facility hundreds of thousands of dollars per hour.
-在那时，计算机并不是以交互方式使用的，因为成本太高：让用户坐在计算机前使用它实在是太贵了，因为大多数时候它只是闲置着，每小时花费设施数十万美元。
-
-**Beyond Libraries: Protection**
-**超越库：保护**
-
-In moving beyond being a simple library of commonly-used services, operating systems took on a more central role in managing machines.
-在超越常用服务的简单库的过程中，操作系统在管理机器方面承担了更核心的角色。
-
-One important aspect of this was the realization that code run on behalf of the OS was special; it had control of devices and thus should be treated differently than normal application code.
-其中一个重要方面是意识到代表操作系统运行的代码是特殊的；它控制着设备，因此应该与普通应用程序代码区别对待。
-
-Why is this?
-为什么会这样？
-
-Well, imagine if you allowed any application to read from anywhere on the disk; the notion of privacy goes out the window, as any program could read any file.
-嗯，想象一下，如果你允许任何应用程序从磁盘上的任何位置读取；隐私的概念就会消失，因为任何程序都可以读取任何文件。
-
-Thus, implementing a file system (to manage your files) as a library makes little sense.
-因此，将文件系统（管理你的文件）作为库来实现是没有意义的。
-
-Instead, something else was needed.
-相反，需要其他东西。
-
-Thus, the idea of a **system call** was invented, pioneered by the Atlas computing system.
-因此，**系统调用**的想法被发明出来，由 Atlas 计算系统首创。
-
-Instead of providing OS routines as a library (where you just make a procedure call to access them), the idea here was to add a special pair of hardware instructions and hardware state to make the transition into the OS a more formal, controlled process.
-与其将操作系统例程作为库提供（只需进行过程调用即可访问它们），这里的想法是添加一对特殊的硬件指令和硬件状态，使进入操作系统的转换成为一个更正式、受控的过程。
-
-The key difference between a system call and a procedure call is that a system call transfers control (i.e., jumps) into the OS while simultaneously raising the hardware privilege level.
-系统调用和过程调用之间的关键区别在于，系统调用将控制权转移（即跳转）到操作系统，同时提高硬件特权级别。
-
-User applications run in what is referred to as **user mode** which means the hardware restricts what applications can do; for example, an application running in user mode can't typically initiate an I/O request to the disk, access any physical memory page, or send a packet on the network.
-用户应用程序在所谓的**用户模式**下运行，这意味着硬件限制了应用程序可以做什么；例如，在用户模式下运行的应用程序通常无法向磁盘发起 I/O 请求、访问任何物理内存页面或在网络上发送数据包。
-
-When a system call is initiated (usually through a special hardware instruction called a **trap**), the hardware transfers control to a pre-specified **trap handler** (that the OS set up previously) and simultaneously raises the privilege level to **kernel mode**.
-当发起系统调用时（通常通过称为**陷阱**的特殊硬件指令），硬件将控制权转移到预先指定的**陷阱处理程序**（操作系统之前设置的），同时将特权级别提高到**内核模式**。
-
-In kernel mode, the OS has full access to the hardware of the system and thus can do things like initiate an I/O request or make more memory available to a program.
-在内核模式下，操作系统可以完全访问系统的硬件，因此可以做诸如发起 I/O 请求或为程序提供更多内存之类的事情。
-
-When the OS is done servicing the request, it passes control back to the user via a special **return-from-trap** instruction, which reverts to user mode while simultaneously passing control back to where the application left off.
-当操作系统完成服务请求时，它通过特殊的**从陷阱返回**指令将控制权交还给用户，该指令恢复到用户模式，同时将控制权交还给应用程序中断的地方。
-
-**The Era of Multiprogramming**
-**多道程序设计时代**
-
-Where operating systems really took off was in the era of computing beyond the mainframe, that of the **minicomputer**.
-操作系统真正腾飞是在超越大型机的计算时代，即**小型机**时代。
-
-Classic machines like the PDP family from Digital Equipment made computers hugely more affordable; thus, instead of having one mainframe per large organization, now a smaller collection of people within an organization could likely have their own computer.
-像 Digital Equipment 的 PDP 系列这样的经典机器使计算机更加实惠；因此，与其每个大型组织拥有一台大型机，现在组织内的一小群人可能拥有自己的计算机。
-
-Not surprisingly, one of the major impacts of this drop in cost was an increase in developer activity; more smart people got their hands on computers and thus made computer systems do more interesting and beautiful things.
-毫不奇怪，成本下降的主要影响之一是开发人员活动的增加；更多的聪明人接触到了计算机，从而使计算机系统做了更多有趣和美妙的事情。
-
-In particular, **multiprogramming** became commonplace due to the desire to make better use of machine resources.
-特别是，由于希望更好地利用机器资源，**多道程序设计**变得普遍起来。
-
-Instead of just running one job at a time, the OS would load a number of jobs into memory and switch rapidly between them, thus improving CPU utilization.
-与其一次只运行一个作业，操作系统会将许多作业加载到内存中并在它们之间快速切换，从而提高 CPU 利用率。
-
-This switching was particularly important because I/O devices were slow; having a program wait on the CPU while its I/O was being serviced was a waste of CPU time.
-这种切换特别重要，因为 I/O 设备很慢；让程序在等待 I/O 服务时占用 CPU 是对 CPU 时间的浪费。
-
-Instead, why not switch to another job and run it for a while?
-相反，为什么不切换到另一个作业并运行一段时间呢？
-
-The desire to support multiprogramming and overlap in the presence of I/O and interrupts forced innovation in the conceptual development of operating systems along a number of directions.
-支持多道程序设计以及在 I/O 和中断存在的情况下进行重叠的愿望迫使操作系统在概念发展方面沿着多个方向进行创新。
-
-Issues such as memory protection became important; we wouldn't want one program to be able to access the memory of another program.
-诸如内存保护之类的问题变得重要起来；我们要不希望一个程序能够访问另一个程序的内存。
-
-Understanding how to deal with the concurrency issues introduced by multiprogramming was also critical; making sure the OS was behaving correctly despite the presence of interrupts is a great challenge.
-理解如何处理由多道程序设计引入的并发问题也至关重要；确保操作系统在存在中断的情况下仍能正确运行是一项巨大的挑战。
-
-We will study these issues and related topics later in the book.
-我们将在本书后面研究这些问题和相关主题。
-
-One of the major practical advances of the time was the introduction of the **UNIX** operating system, primarily thanks to Ken Thompson (and Dennis Ritchie) at Bell Labs (yes, the phone company).
-当时主要的实践进步之一是 **UNIX** 操作系统的引入，这主要归功于贝尔实验室（是的，电话公司）的 Ken Thompson（和 Dennis Ritchie）。
-
-UNIX took many good ideas from different operating systems (particularly from Multics, and some from systems like TENEX and the Berkeley Time-Sharing System), but made them simpler and easier to use.
-UNIX 从不同的操作系统（特别是 Multics，以及 TENEX 和伯克利分时系统等系统）中吸取了许多好点子，但使它们更简单、更易于使用。
-
-Soon this team was shipping tapes containing UNIX source code to people around the world, many of whom then got involved and added to the system themselves; see the Aside (next page) for more detail.
-很快，这个团队就开始向世界各地的人们运送包含 UNIX 源代码的磁带，其中许多人随后参与进来并亲自为系统添砖加瓦；有关更多详细信息，请参阅旁白（下一页）。
-
-**The Modern Era**
-**现代**
-
-Beyond the minicomputer came a new type of machine, cheaper, faster, and for the masses: the **personal computer**, or **PC** as we call it today.
-继小型机之后，出现了一种新型机器，更便宜、更快、面向大众：**个人计算机**，也就是我们要今天所说的 **PC**。
-
-Led by Apple's early machines (e.g., the Apple II) and the IBM PC, this new breed of machine would soon become the dominant force in computing.
-在苹果早期机器（例如 Apple II）和 IBM PC 的带领下，这种新型机器很快将成为计算领域的主导力量。
+Think about this to see if you can figure out why.
+==思考一下，看看你是否能弄清楚原因。==
