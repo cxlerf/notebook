@@ -11,10 +11,14 @@
             "id": "e7e2b34276641baf",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "计算机组成原理王道.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "新标签页"
+              "title": "计算机组成原理王道"
             }
           }
         ]
@@ -74,7 +78,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 300,
+    "collapsed": true
   },
   "right": {
     "id": "d75001007d37e7c7",
@@ -156,6 +161,7 @@
   },
   "left-ribbon": {
     "hiddenItems": {
+      "bases:创建新数据库": false,
       "switcher:打开快速切换": false,
       "graph:查看关系图谱": false,
       "canvas:新建白板": false,
@@ -166,10 +172,10 @@
   },
   "active": "e7e2b34276641baf",
   "lastOpenFiles": [
+    "我的计算机使用笔记.md",
     "计算机组成原理王道.md",
     "test.md",
     "test3.md",
-    "test.pdf",
-    "我的计算机使用笔记.md"
+    "test.pdf"
   ]
 }
